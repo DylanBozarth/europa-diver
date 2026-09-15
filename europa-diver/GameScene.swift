@@ -12,6 +12,9 @@ struct PhysicsCategory {
     static let player: UInt32 = 0x1 << 0
     static let obstacle: UInt32 = 0x1 << 1
     static let wall: UInt32 = 0x1 << 2
+    static let smallFish: UInt32 = 0x1 << 3
+    static let largeFish: UInt32 = 0x1 << 4
+    static let hostileFish: UInt32 = 0x1 << 5
 }
 
 class GameScene: SKScene, SKPhysicsContactDelegate {
@@ -29,6 +32,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let spawnAheadDistance: CGFloat = 500
     private let despawnBehindDistance: CGFloat = 500
 
+    private var fish: [Fish] = []
+    private var furthestFishSpawnedX: CGFloat = 0
+    private let fishSpacing: ClosedRange<CGFloat> = 150...300
+    private var lastUpdateTime: TimeInterval = 0
+
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.02, green: 0.08, blue: 0.18, alpha: 1.0)
         physicsWorld.gravity = .zero
@@ -42,6 +50,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         furthestSpawnedX = player.position.x
         spawnObstacles(upTo: furthestSpawnedX + spawnAheadDistance)
+
+        furthestFishSpawnedX = player.position.x
+        spawnFish(upTo: furthestFishSpawnedX + spawnAheadDistance)
     }
 
     private func setUpBoundaries() {
@@ -67,7 +78,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         body.restitution = 0.2
         body.categoryBitMask = PhysicsCategory.player
         body.collisionBitMask = PhysicsCategory.obstacle | PhysicsCategory.wall
-        body.contactTestBitMask = PhysicsCategory.obstacle
+        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.largeFish | PhysicsCategory.hostileFish
         player.physicsBody = body
 
         addChild(player)
@@ -105,6 +116,44 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    private func spawnFish(upTo maxX: CGFloat) {
+        while furthestFishSpawnedX < maxX {
+            furthestFishSpawnedX += CGFloat.random(in: fishSpacing)
+            addFish(around: furthestFishSpawnedX)
+        }
+    }
+
+    private func randomFishKind() -> FishKind {
+        switch Int.random(in: 0..<100) {
+        case 0..<60: return .small
+        case 60..<90: return .large
+        default: return .hostile
+        }
+    }
+
+    private func addFish(around x: CGFloat) {
+        let roamLeft = x - 60
+        let roamRight = x + 60
+        let roamBottom = worldBottom + 20
+        let roamTop = worldTop - 20
+
+        let newFish = Fish(kind: randomFishKind(), roamLeft: roamLeft, roamRight: roamRight, roamBottom: roamBottom, roamTop: roamTop)
+        newFish.position = CGPoint(x: x, y: CGFloat.random(in: roamBottom...roamTop))
+
+        addChild(newFish)
+        fish.append(newFish)
+    }
+
+    private func despawnFish(behind minX: CGFloat) {
+        fish.removeAll { fish in
+            if fish.position.x < minX {
+                fish.removeFromParent()
+                return true
+            }
+            return false
+        }
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         touchLocation = touches.first?.location(in: self)
     }
@@ -122,6 +171,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     override func update(_ currentTime: TimeInterval) {
+        let deltaTime = lastUpdateTime == 0 ? 0 : currentTime - lastUpdateTime
+        lastUpdateTime = currentTime
+
         if let target = touchLocation, let body = player.physicsBody {
             let dx = target.x - player.position.x
             let dy = target.y - player.position.y
@@ -137,13 +189,34 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         spawnObstacles(upTo: cameraNode.position.x + spawnAheadDistance)
         despawnObstacles(behind: cameraNode.position.x - despawnBehindDistance)
+
+        spawnFish(upTo: cameraNode.position.x + spawnAheadDistance)
+        despawnFish(behind: cameraNode.position.x - despawnBehindDistance)
+        fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position) }
     }
 
     func didBegin(_ contact: SKPhysicsContact) {
-        player.run(SKAction.sequence([
-            SKAction.run { [weak self] in self?.player.fillColor = .red },
+        let categories = [contact.bodyA.categoryBitMask, contact.bodyB.categoryBitMask]
+
+        if categories.contains(PhysicsCategory.obstacle) {
+            flash(player, backTo: .white)
+        }
+
+        if categories.contains(PhysicsCategory.hostileFish) {
+            let hostileFish = [contact.bodyA.node, contact.bodyB.node]
+                .compactMap { $0 as? Fish }
+                .first { $0.kind == .hostile }
+            if let hostileFish {
+                flash(hostileFish, backTo: hostileFish.normalColor)
+            }
+        }
+    }
+
+    private func flash(_ node: SKShapeNode, backTo normalColor: SKColor) {
+        node.run(SKAction.sequence([
+            SKAction.run { node.fillColor = .red },
             SKAction.wait(forDuration: 0.15),
-            SKAction.run { [weak self] in self?.player.fillColor = .white }
+            SKAction.run { node.fillColor = normalColor }
         ]))
     }
 }
