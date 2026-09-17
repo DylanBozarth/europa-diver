@@ -16,6 +16,7 @@ class Fish: SKShapeNode {
     let kind: FishKind
     let normalColor: SKColor
     private let swimSpeed: CGFloat
+    private let radius: CGFloat
 
     private var swimDirection = CGVector(dx: 0, dy: 0)
     private var timeUntilNextTurn: TimeInterval = 0
@@ -24,6 +25,9 @@ class Fish: SKShapeNode {
     private let roamBottom: CGFloat
     private let roamLeft: CGFloat
     private let roamRight: CGFloat
+
+    private let avoidRadius: CGFloat = 70
+    private let avoidStrength: CGFloat = 1.5
 
     init(kind: FishKind, roamLeft: CGFloat, roamRight: CGFloat, roamBottom: CGFloat, roamTop: CGFloat) {
         self.kind = kind
@@ -46,6 +50,7 @@ class Fish: SKShapeNode {
         }
 
         normalColor = Fish.color(for: kind)
+        radius = size / 2
 
         super.init()
         name = "fish"
@@ -97,24 +102,95 @@ class Fish: SKShapeNode {
         timeUntilNextTurn = TimeInterval.random(in: 1.5...4.0)
     }
 
-    func update(deltaTime: TimeInterval, playerPosition: CGPoint) {
+    func update(deltaTime: TimeInterval, playerPosition: CGPoint, nearbyObstacles: [CGPoint]) {
         switch kind {
         case .small, .large:
-            roam(deltaTime: deltaTime)
+            roam(deltaTime: deltaTime, obstacles: nearbyObstacles)
         case .hostile:
-            chase(playerPosition, deltaTime: deltaTime)
+            chase(playerPosition, deltaTime: deltaTime, obstacles: nearbyObstacles)
         }
     }
 
-    private func roam(deltaTime: TimeInterval) {
+    private func avoidanceVector(obstacles: [CGPoint]) -> CGVector {
+        var avoid = CGVector(dx: 0, dy: 0)
+        for obstacle in obstacles {
+            let dx = position.x - obstacle.x
+            let dy = position.y - obstacle.y
+            let distance = sqrt(dx * dx + dy * dy)
+            guard distance < avoidRadius, distance > 0.001 else { continue }
+
+            let strength = (avoidRadius - distance) / avoidRadius
+            avoid.dx += (dx / distance) * strength
+            avoid.dy += (dy / distance) * strength
+        }
+        return avoid
+    }
+
+    private func normalized(_ vector: CGVector, fallback: CGVector) -> CGVector {
+        let length = sqrt(vector.dx * vector.dx + vector.dy * vector.dy)
+        guard length > 0.001 else { return fallback }
+        return CGVector(dx: vector.dx / length, dy: vector.dy / length)
+    }
+
+    /// Hard backstop: guarantees a fish's position never ends up inside an obstacle,
+    /// regardless of how strong the steering avoidance above was.
+    private func resolvedPosition(for proposed: CGPoint, avoiding obstacles: [CGPoint]) -> CGPoint {
+        var resolved = proposed
+        let minDistance = WorldConstants.obstacleRadius + radius
+
+        for obstacle in obstacles {
+            let dx = resolved.x - obstacle.x
+            let dy = resolved.y - obstacle.y
+            let distance = sqrt(dx * dx + dy * dy)
+            guard distance < minDistance else { continue }
+
+            if distance > 0.001 {
+                let scale = minDistance / distance
+                resolved = CGPoint(x: obstacle.x + dx * scale, y: obstacle.y + dy * scale)
+            } else {
+                resolved = CGPoint(x: obstacle.x + minDistance, y: obstacle.y)
+            }
+        }
+        return resolved
+    }
+
+    /// Walks toward `destination` in small increments, resolving obstacle overlap after
+    /// each one, so a fast fish can't cover enough distance in a single frame to land on
+    /// the far side of an obstacle before the collision check ever sees it (tunneling).
+    private func moveTowards(_ destination: CGPoint, avoiding obstacles: [CGPoint]) -> CGPoint {
+        let dx = destination.x - position.x
+        let dy = destination.y - position.y
+        let totalDistance = sqrt(dx * dx + dy * dy)
+        guard totalDistance > 0.001 else { return position }
+
+        let maxStep: CGFloat = 4
+        let steps = max(1, Int((totalDistance / maxStep).rounded(.up)))
+        let stepVector = CGVector(dx: dx / CGFloat(steps), dy: dy / CGFloat(steps))
+
+        var current = position
+        for _ in 0..<steps {
+            let stepped = CGPoint(x: current.x + stepVector.dx, y: current.y + stepVector.dy)
+            current = resolvedPosition(for: stepped, avoiding: obstacles)
+        }
+        return current
+    }
+
+    private func roam(deltaTime: TimeInterval, obstacles: [CGPoint]) {
         timeUntilNextTurn -= deltaTime
         if timeUntilNextTurn <= 0 {
             pickNewDirection()
         }
 
+        let avoidance = avoidanceVector(obstacles: obstacles)
+        let direction = normalized(
+            CGVector(dx: swimDirection.dx + avoidance.dx * avoidStrength,
+                      dy: swimDirection.dy + avoidance.dy * avoidStrength),
+            fallback: swimDirection
+        )
+
         var newPosition = CGPoint(
-            x: position.x + swimDirection.dx * swimSpeed * CGFloat(deltaTime),
-            y: position.y + swimDirection.dy * swimSpeed * CGFloat(deltaTime)
+            x: position.x + direction.dx * swimSpeed * CGFloat(deltaTime),
+            y: position.y + direction.dy * swimSpeed * CGFloat(deltaTime)
         )
 
         if newPosition.x < roamLeft || newPosition.x > roamRight {
@@ -126,22 +202,32 @@ class Fish: SKShapeNode {
             newPosition.y = position.y
         }
 
-        move(to: newPosition, facing: swimDirection.dx)
+        let resolved = moveTowards(newPosition, avoiding: obstacles)
+
+        move(to: resolved, facing: direction.dx)
     }
 
-    private func chase(_ target: CGPoint, deltaTime: TimeInterval) {
+    private func chase(_ target: CGPoint, deltaTime: TimeInterval, obstacles: [CGPoint]) {
         let dx = target.x - position.x
         let dy = target.y - position.y
         let distance = sqrt(dx * dx + dy * dy)
         guard distance > 1 else { return }
 
-        let direction = CGVector(dx: dx / distance, dy: dy / distance)
-        let newPosition = CGPoint(
+        let toTarget = CGVector(dx: dx / distance, dy: dy / distance)
+        let avoidance = avoidanceVector(obstacles: obstacles)
+        let direction = normalized(
+            CGVector(dx: toTarget.dx + avoidance.dx * avoidStrength,
+                      dy: toTarget.dy + avoidance.dy * avoidStrength),
+            fallback: toTarget
+        )
+
+        let destination = CGPoint(
             x: position.x + direction.dx * swimSpeed * CGFloat(deltaTime),
             y: position.y + direction.dy * swimSpeed * CGFloat(deltaTime)
         )
+        let resolved = moveTowards(destination, avoiding: obstacles)
 
-        move(to: newPosition, facing: direction.dx)
+        move(to: resolved, facing: direction.dx)
     }
 
     private func move(to newPosition: CGPoint, facing dx: CGFloat) {

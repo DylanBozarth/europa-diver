@@ -15,27 +15,44 @@ struct PhysicsCategory {
     static let smallFish: UInt32 = 0x1 << 3
     static let largeFish: UInt32 = 0x1 << 4
     static let hostileFish: UInt32 = 0x1 << 5
+    static let ooi: UInt32 = 0x1 << 6
+}
+
+enum WorldConstants {
+    static let obstacleRadius: CGFloat = 20
 }
 
 class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private let player = SKShapeNode(circleOfRadius: 12)
     private let cameraNode = SKCameraNode()
-    private var touchLocation: CGPoint?
+    private let joystick = Joystick()
+    private var joystickTouch: UITouch?
     private let moveSpeed: CGFloat = 160
 
     private let worldTop: CGFloat = 180
     private let worldBottom: CGFloat = -180
 
+    private let screensEachSide = 3
+    private var worldMinX: CGFloat = 0
+    private var worldMaxX: CGFloat = 0
+
+    private var obstacles: [SKShapeNode] = []
     private var furthestSpawnedX: CGFloat = 0
+    private var nearestSpawnedLeftX: CGFloat = 0
     private let obstacleSpacing: ClosedRange<CGFloat> = 120...220
     private let spawnAheadDistance: CGFloat = 500
     private let despawnBehindDistance: CGFloat = 500
 
     private var fish: [Fish] = []
     private var furthestFishSpawnedX: CGFloat = 0
+    private var nearestFishSpawnedLeftX: CGFloat = 0
     private let fishSpacing: ClosedRange<CGFloat> = 150...300
     private var lastUpdateTime: TimeInterval = 0
+
+    private var furthestOOISpawnedX: CGFloat = 0
+    private var nearestOOISpawnedLeftX: CGFloat = 0
+    private let ooiSpacing: ClosedRange<CGFloat> = 300...600
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.02, green: 0.08, blue: 0.18, alpha: 1.0)
@@ -47,12 +64,23 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         setUpBoundaries()
         setUpPlayer()
+        setUpJoystick()
+        setUpMapLimits()
 
         furthestSpawnedX = player.position.x
-        spawnObstacles(upTo: furthestSpawnedX + spawnAheadDistance)
+        nearestSpawnedLeftX = player.position.x
+        spawnObstacles(upTo: player.position.x + spawnAheadDistance)
+        spawnObstaclesLeft(downTo: player.position.x - spawnAheadDistance)
 
         furthestFishSpawnedX = player.position.x
-        spawnFish(upTo: furthestFishSpawnedX + spawnAheadDistance)
+        nearestFishSpawnedLeftX = player.position.x
+        spawnFish(upTo: player.position.x + spawnAheadDistance)
+        spawnFishLeft(downTo: player.position.x - spawnAheadDistance)
+
+        furthestOOISpawnedX = player.position.x
+        nearestOOISpawnedLeftX = player.position.x
+        spawnOOIs(upTo: player.position.x + spawnAheadDistance)
+        spawnOOIsLeft(downTo: player.position.x - spawnAheadDistance)
     }
 
     private func setUpBoundaries() {
@@ -64,6 +92,36 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             wall.physicsBody?.collisionBitMask = PhysicsCategory.player
             addChild(wall)
         }
+    }
+
+    private func setUpMapLimits() {
+        let halfWorldWidth = size.width * CGFloat(screensEachSide)
+        worldMinX = player.position.x - halfWorldWidth
+        worldMaxX = player.position.x + halfWorldWidth
+
+        addBoundaryWall(at: worldMinX)
+        addBoundaryWall(at: worldMaxX)
+    }
+
+    private func addBoundaryWall(at x: CGFloat) {
+        let squareSize: CGFloat = 40
+        var y = worldBottom
+        while y < worldTop {
+            let square = SKShapeNode(rectOf: CGSize(width: squareSize, height: squareSize))
+            square.fillColor = .black
+            square.strokeColor = .black
+            square.position = CGPoint(x: x, y: y + squareSize / 2)
+            square.zPosition = 8
+            addChild(square)
+            y += squareSize
+        }
+
+        let wall = SKNode()
+        wall.position = CGPoint(x: x, y: 0)
+        wall.physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: 0, y: worldBottom), to: CGPoint(x: 0, y: worldTop))
+        wall.physicsBody?.categoryBitMask = PhysicsCategory.wall
+        wall.physicsBody?.collisionBitMask = PhysicsCategory.player
+        addChild(wall)
     }
 
     private func setUpPlayer() {
@@ -78,23 +136,47 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         body.restitution = 0.2
         body.categoryBitMask = PhysicsCategory.player
         body.collisionBitMask = PhysicsCategory.obstacle | PhysicsCategory.wall
-        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.largeFish | PhysicsCategory.hostileFish
+        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.largeFish | PhysicsCategory.hostileFish | PhysicsCategory.ooi
         player.physicsBody = body
 
         addChild(player)
         cameraNode.position = player.position
     }
 
+    private func setUpJoystick() {
+        cameraNode.addChild(joystick)
+        repositionJoystick()
+    }
+
+    private func repositionJoystick() {
+        joystick.position = CGPoint(x: size.width / 2 - 80, y: -size.height / 2 + 80)
+    }
+
+    override func didChangeSize(_ oldSize: CGSize) {
+        super.didChangeSize(oldSize)
+        repositionJoystick()
+    }
+
     private func spawnObstacles(upTo maxX: CGFloat) {
         while furthestSpawnedX < maxX {
             furthestSpawnedX += CGFloat.random(in: obstacleSpacing)
+            guard furthestSpawnedX <= worldMaxX else { break }
             let y = CGFloat.random(in: (worldBottom + 40)...(worldTop - 40))
             addObstacle(at: CGPoint(x: furthestSpawnedX, y: y))
         }
     }
 
+    private func spawnObstaclesLeft(downTo minX: CGFloat) {
+        while nearestSpawnedLeftX > minX {
+            nearestSpawnedLeftX -= CGFloat.random(in: obstacleSpacing)
+            guard nearestSpawnedLeftX >= worldMinX else { break }
+            let y = CGFloat.random(in: (worldBottom + 40)...(worldTop - 40))
+            addObstacle(at: CGPoint(x: nearestSpawnedLeftX, y: y))
+        }
+    }
+
     private func addObstacle(at position: CGPoint) {
-        let radius: CGFloat = 20
+        let radius = WorldConstants.obstacleRadius
         let rock = SKShapeNode(circleOfRadius: radius)
         rock.name = "obstacle"
         rock.position = position
@@ -108,18 +190,32 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         rock.physicsBody = body
 
         addChild(rock)
+        obstacles.append(rock)
     }
 
     private func despawnObstacles(behind minX: CGFloat) {
-        for child in children where child.name == "obstacle" && child.position.x < minX {
-            child.removeFromParent()
+        obstacles.removeAll { obstacle in
+            if obstacle.position.x < minX {
+                obstacle.removeFromParent()
+                return true
+            }
+            return false
         }
     }
 
     private func spawnFish(upTo maxX: CGFloat) {
         while furthestFishSpawnedX < maxX {
             furthestFishSpawnedX += CGFloat.random(in: fishSpacing)
+            guard furthestFishSpawnedX <= worldMaxX else { break }
             addFish(around: furthestFishSpawnedX)
+        }
+    }
+
+    private func spawnFishLeft(downTo minX: CGFloat) {
+        while nearestFishSpawnedLeftX > minX {
+            nearestFishSpawnedLeftX -= CGFloat.random(in: fishSpacing)
+            guard nearestFishSpawnedLeftX >= worldMinX else { break }
+            addFish(around: nearestFishSpawnedLeftX)
         }
     }
 
@@ -132,8 +228,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func addFish(around x: CGFloat) {
-        let roamLeft = x - 60
-        let roamRight = x + 60
+        let roamLeft = max(x - 60, worldMinX)
+        let roamRight = min(x + 60, worldMaxX)
         let roamBottom = worldBottom + 20
         let roamTop = worldTop - 20
 
@@ -154,45 +250,102 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    private func spawnOOIs(upTo maxX: CGFloat) {
+        while furthestOOISpawnedX < maxX {
+            furthestOOISpawnedX += CGFloat.random(in: ooiSpacing)
+            guard furthestOOISpawnedX <= worldMaxX else { break }
+            let y = CGFloat.random(in: (worldBottom + 40)...(worldTop - 40))
+            addOOI(at: CGPoint(x: furthestOOISpawnedX, y: y))
+        }
+    }
+
+    private func spawnOOIsLeft(downTo minX: CGFloat) {
+        while nearestOOISpawnedLeftX > minX {
+            nearestOOISpawnedLeftX -= CGFloat.random(in: ooiSpacing)
+            guard nearestOOISpawnedLeftX >= worldMinX else { break }
+            let y = CGFloat.random(in: (worldBottom + 40)...(worldTop - 40))
+            addOOI(at: CGPoint(x: nearestOOISpawnedLeftX, y: y))
+        }
+    }
+
+    private func addOOI(at position: CGPoint) {
+        let ooi = OOI()
+        ooi.position = position
+        addChild(ooi)
+    }
+
+    private func despawnOOIs(behind minX: CGFloat) {
+        for child in children where child.name == "ooi" && child.position.x < minX {
+            child.removeFromParent()
+        }
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        touchLocation = touches.first?.location(in: self)
+        guard joystickTouch == nil else { return }
+        guard let touch = touches.first(where: isOnRightSide) else { return }
+
+        joystickTouch = touch
+        updateJoystick(with: touch)
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        touchLocation = touches.first?.location(in: self)
+        guard let joystickTouch, touches.contains(joystickTouch) else { return }
+        updateJoystick(with: joystickTouch)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        touchLocation = nil
+        endJoystickTouchIfNeeded(in: touches)
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        touchLocation = nil
+        endJoystickTouchIfNeeded(in: touches)
+    }
+
+    private func isOnRightSide(_ touch: UITouch) -> Bool {
+        // Scene-space, relative to the camera, rather than `view.bounds` — the view's
+        // bounds can still reflect a pre-rotation (portrait) size at launch since this
+        // app forces landscape, which would misplace the left/right split entirely.
+        touch.location(in: self).x > cameraNode.position.x
+    }
+
+    private func updateJoystick(with touch: UITouch) {
+        let scenePoint = touch.location(in: self)
+        let localPoint = joystick.convert(scenePoint, from: self)
+        joystick.update(withTouch: localPoint)
+    }
+
+    private func endJoystickTouchIfNeeded(in touches: Set<UITouch>) {
+        guard let current = joystickTouch, touches.contains(current) else { return }
+        joystickTouch = nil
+        joystick.update(withTouch: nil)
     }
 
     override func update(_ currentTime: TimeInterval) {
         let deltaTime = lastUpdateTime == 0 ? 0 : currentTime - lastUpdateTime
         lastUpdateTime = currentTime
 
-        if let target = touchLocation, let body = player.physicsBody {
-            let dx = target.x - player.position.x
-            let dy = target.y - player.position.y
-            let distance = sqrt(dx * dx + dy * dy)
-
-            if distance > 4 {
-                let direction = CGVector(dx: dx / distance, dy: dy / distance)
-                body.velocity = CGVector(dx: direction.dx * moveSpeed, dy: direction.dy * moveSpeed)
+        if let body = player.physicsBody {
+            let input = joystick.vector
+            if input.dx != 0 || input.dy != 0 {
+                body.velocity = CGVector(dx: input.dx * moveSpeed, dy: input.dy * moveSpeed)
             }
         }
 
         cameraNode.position.x = player.position.x
 
         spawnObstacles(upTo: cameraNode.position.x + spawnAheadDistance)
+        spawnObstaclesLeft(downTo: cameraNode.position.x - spawnAheadDistance)
         despawnObstacles(behind: cameraNode.position.x - despawnBehindDistance)
 
         spawnFish(upTo: cameraNode.position.x + spawnAheadDistance)
+        spawnFishLeft(downTo: cameraNode.position.x - spawnAheadDistance)
         despawnFish(behind: cameraNode.position.x - despawnBehindDistance)
-        fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position) }
+        let obstaclePositions = obstacles.map { $0.position }
+        fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position, nearbyObstacles: obstaclePositions) }
+
+        spawnOOIs(upTo: cameraNode.position.x + spawnAheadDistance)
+        spawnOOIsLeft(downTo: cameraNode.position.x - spawnAheadDistance)
+        despawnOOIs(behind: cameraNode.position.x - despawnBehindDistance)
     }
 
     func didBegin(_ contact: SKPhysicsContact) {
@@ -209,6 +362,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             if let hostileFish {
                 flash(hostileFish, backTo: hostileFish.normalColor)
             }
+        }
+
+        if categories.contains(PhysicsCategory.ooi) {
+            let ooi = [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? OOI }.first
+            ooi?.removeFromParent()
         }
     }
 

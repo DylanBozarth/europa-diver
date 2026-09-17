@@ -17,8 +17,11 @@ class GameViewController: UIViewController {
         if let view = self.view as! SKView? {
             // Load the SKScene from 'GameScene.sks'
             if let scene = SKScene(fileNamed: "GameScene") {
-                // Set the scale mode to scale to fit the window
-                scene.scaleMode = .aspectFill
+                // Keep scene.size in sync with the view's actual point size so that
+                // camera-relative UI (e.g. the joystick) and the on-screen viewport
+                // agree on scale — aspectFill would scale/crop the fixed 512x384
+                // canvas to fit the device, throwing that off.
+                scene.scaleMode = .resizeFill
                 
                 // Present the scene
                 view.presentScene(scene)
