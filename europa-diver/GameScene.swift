@@ -41,6 +41,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private let statsHUD = PlayerStatsHUD()
 
+    private let gameOverOverlay = GameOverOverlay()
+    private var isGameOver = false
+
+    private var touchingHostileFish: Set<Fish> = []
+    private var nibbleTimer: TimeInterval = 0
+    private let nibbleInterval: TimeInterval = 0.5
+    private let nibbleDamagePerFish = 5
+
     private let worldTop: CGFloat = 180
     private let worldBottom: CGFloat = -180
 
@@ -67,6 +75,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setUpHUDButtons()
         setUpStatsHUD()
         setUpLoadingOverlay()
+        setUpGameOverOverlay()
         setUpMapLimits()
         generateLevel()
         setUpLevelEntrance()
@@ -172,12 +181,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         loadingOverlay.resize(to: size)
     }
 
+    private func setUpGameOverOverlay() {
+        cameraNode.addChild(gameOverOverlay)
+        gameOverOverlay.resize(to: size)
+    }
+
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
         repositionJoystick()
         repositionHUDButtons()
         repositionStatsHUD()
         loadingOverlay.resize(to: size)
+        gameOverOverlay.resize(to: size)
     }
 
     private func generateLevel() {
@@ -236,12 +251,30 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         cameraNode.position = player.position
     }
 
+    private func showGameOver() {
+        guard !isGameOver else { return }
+        isGameOver = true
+
+        player.physicsBody?.velocity = .zero
+        gameOverOverlay.show()
+    }
+
+    private func retryGame() {
+        playerStats.reset()
+        rebuildLevel()
+
+        isGameOver = false
+        gameOverOverlay.hide()
+    }
+
     private func clearLevel() {
         obstacles.forEach { $0.removeFromParent() }
         obstacles.removeAll()
 
         fish.forEach { $0.removeFromParent() }
         fish.removeAll()
+        touchingHostileFish.removeAll()
+        nibbleTimer = 0
 
         children
             .filter { $0.name == "ooi" || $0.name == "emptySlot" }
@@ -300,6 +333,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if isGameOver {
+            if let touch = touches.first {
+                let pointInOverlay = gameOverOverlay.convert(touch.location(in: self), from: self)
+                if gameOverOverlay.hitTestRetry(pointInOverlay) {
+                    retryGame()
+                }
+            }
+            return
+        }
+
         guard joystickTouch == nil else { return }
         guard let touch = touches.first(where: isOnRightSide) else { return }
 
@@ -343,6 +386,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let deltaTime = lastUpdateTime == 0 ? 0 : currentTime - lastUpdateTime
         lastUpdateTime = currentTime
 
+        guard !isGameOver else { return }
+
         if !isLoadingLevel, let body = player.physicsBody {
             let input = joystick.vector
             if input.dx != 0 || input.dy != 0 {
@@ -355,7 +400,23 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let obstaclePositions = obstacles.map { $0.position }
         fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position, nearbyObstacles: obstaclePositions) }
 
+        updateHostileFishNibble(deltaTime: deltaTime)
+
         statsHUD.update(stats: playerStats)
+    }
+
+    private func updateHostileFishNibble(deltaTime: TimeInterval) {
+        guard !touchingHostileFish.isEmpty else { return }
+
+        nibbleTimer += deltaTime
+        guard nibbleTimer >= nibbleInterval else { return }
+        nibbleTimer = 0
+
+        playerStats.adjustDurability(by: -nibbleDamagePerFish * touchingHostileFish.count)
+
+        if playerStats.durability <= 0 {
+            showGameOver()
+        }
     }
 
     func didBegin(_ contact: SKPhysicsContact) {
@@ -365,13 +426,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             flash(player, backTo: .white)
         }
 
-        if categories.contains(PhysicsCategory.hostileFish) {
-            let hostileFish = [contact.bodyA.node, contact.bodyB.node]
-                .compactMap { $0 as? Fish }
-                .first { $0.kind == .hostile }
-            if let hostileFish {
-                flash(hostileFish, backTo: hostileFish.normalColor)
-            }
+        if categories.contains(PhysicsCategory.hostileFish), let hostileFish = hostileFishNode(in: contact) {
+            flash(hostileFish, backTo: hostileFish.normalColor)
+            touchingHostileFish.insert(hostileFish)
         }
 
         if categories.contains(PhysicsCategory.ooi) {
@@ -382,6 +439,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         if categories.contains(PhysicsCategory.levelEntrance) {
             enterNextLevel()
         }
+    }
+
+    func didEnd(_ contact: SKPhysicsContact) {
+        let categories = [contact.bodyA.categoryBitMask, contact.bodyB.categoryBitMask]
+        guard categories.contains(PhysicsCategory.hostileFish), let hostileFish = hostileFishNode(in: contact) else { return }
+        touchingHostileFish.remove(hostileFish)
+    }
+
+    private func hostileFishNode(in contact: SKPhysicsContact) -> Fish? {
+        [contact.bodyA.node, contact.bodyB.node]
+            .compactMap { $0 as? Fish }
+            .first { $0.kind == .hostile }
     }
 
     private func flash(_ node: SKShapeNode, backTo normalColor: SKColor) {

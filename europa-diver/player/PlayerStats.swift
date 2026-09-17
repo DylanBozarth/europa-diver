@@ -2,9 +2,7 @@
 //  PlayerStats.swift
 //  europa-diver
 //
-//  Tracks the submarine's power, durability, and inventory. Pure data/state —
-//  nothing in the game triggers or reads these yet, and there's no UI for
-//  them yet either.
+//  Tracks the submarine's power, durability, and inventory.
 //
 
 import Foundation
@@ -44,6 +42,12 @@ class PlayerStats {
         guard let index = inventory.firstIndex(of: item) else { return false }
         inventory.remove(at: index)
         return true
+    }
+
+    func reset() {
+        power = PlayerStats.maxPower
+        durability = PlayerStats.maxDurability
+        inventory.removeAll()
     }
 }
 
