@@ -38,16 +38,33 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let scannerButton = HUDButton(icon: "🔍")
     private let lightButton = HUDButton(icon: "💡")
     private let shieldButton = HUDButton(icon: "🛡️")
+    private let shockButton = HUDButton(icon: "⚡")
+    private let shockRadius: CGFloat = 100
+    private let shockPowerCost = 20
 
     private let statsHUD = PlayerStatsHUD()
 
+    private let pointsManager = PointsManager()
+    private let pointsHUD = PointsHUD()
+    private let ooiPointValue = 10
+
     private let gameOverOverlay = GameOverOverlay()
     private var isGameOver = false
+
+    private let shopOverlay = ShopOverlay()
+    private var isShopOpen = false
+
+    private let upgradeStore = UpgradeStore()
+    private let electricShockCost = 50
 
     private var touchingHostileFish: Set<Fish> = []
     private var nibbleTimer: TimeInterval = 0
     private let nibbleInterval: TimeInterval = 0.5
     private let nibbleDamagePerFish = 5
+
+    private var lastObstacleHitTime: TimeInterval = 0
+    private let obstacleHitCooldown: TimeInterval = 0.5
+    private let obstacleDamage = 10
 
     private let worldTop: CGFloat = 180
     private let worldBottom: CGFloat = -180
@@ -74,8 +91,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setUpJoystick()
         setUpHUDButtons()
         setUpStatsHUD()
+        setUpPointsHUD()
         setUpLoadingOverlay()
         setUpGameOverOverlay()
+        setUpShopOverlay()
         setUpMapLimits()
         generateLevel()
         setUpLevelEntrance()
@@ -154,7 +173,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         cameraNode.addChild(scannerButton)
         cameraNode.addChild(lightButton)
         cameraNode.addChild(shieldButton)
+        cameraNode.addChild(shockButton)
         repositionHUDButtons()
+        refreshShockButtonAvailability()
     }
 
     private func repositionHUDButtons() {
@@ -162,9 +183,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let spacing: CGFloat = 70
         let bottomY = -size.height / 2 + 80
 
-        scannerButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
-        lightButton.position = CGPoint(x: x, y: bottomY + spacing)
-        shieldButton.position = CGPoint(x: x, y: bottomY)
+        scannerButton.position = CGPoint(x: x, y: bottomY + spacing * 3)
+        lightButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
+        shieldButton.position = CGPoint(x: x, y: bottomY + spacing)
+        shockButton.position = CGPoint(x: x, y: bottomY)
+    }
+
+    private func refreshShockButtonAvailability() {
+        shockButton.alpha = upgradeStore.isOwned(.electricShock) ? 1.0 : 0.4
     }
 
     private func setUpStatsHUD() {
@@ -174,6 +200,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func repositionStatsHUD() {
         statsHUD.position = CGPoint(x: -size.width / 2 + 20, y: size.height / 2 - 30)
+    }
+
+    private func setUpPointsHUD() {
+        cameraNode.addChild(pointsHUD)
+        repositionPointsHUD()
+        pointsHUD.update(points: pointsManager.points)
+    }
+
+    private func repositionPointsHUD() {
+        pointsHUD.position = CGPoint(x: size.width / 2 - 20, y: size.height / 2 - 30)
     }
 
     private func setUpLoadingOverlay() {
@@ -186,13 +222,20 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         gameOverOverlay.resize(to: size)
     }
 
+    private func setUpShopOverlay() {
+        cameraNode.addChild(shopOverlay)
+        shopOverlay.resize(to: size)
+    }
+
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
         repositionJoystick()
         repositionHUDButtons()
         repositionStatsHUD()
+        repositionPointsHUD()
         loadingOverlay.resize(to: size)
         gameOverOverlay.resize(to: size)
+        shopOverlay.resize(to: size)
     }
 
     private func generateLevel() {
@@ -267,6 +310,48 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         gameOverOverlay.hide()
     }
 
+    private func openShop() {
+        gameOverOverlay.hide()
+        shopOverlay.updateElectricShock(owned: upgradeStore.isOwned(.electricShock), cost: electricShockCost)
+        shopOverlay.show()
+        isShopOpen = true
+    }
+
+    private func closeShop() {
+        shopOverlay.hide()
+        gameOverOverlay.show()
+        isShopOpen = false
+    }
+
+    private func purchaseElectricShock() {
+        guard !upgradeStore.isOwned(.electricShock) else { return }
+        guard pointsManager.spendPoints(electricShockCost) else { return }
+
+        upgradeStore.markOwned(.electricShock)
+        pointsHUD.update(points: pointsManager.points)
+        shopOverlay.updateElectricShock(owned: true, cost: electricShockCost)
+        refreshShockButtonAvailability()
+    }
+
+    private func triggerElectricShock() {
+        guard upgradeStore.isOwned(.electricShock) else { return }
+        guard playerStats.power >= shockPowerCost else { return }
+
+        playerStats.adjustPower(by: -shockPowerCost)
+
+        let nearbyFish = fish.filter { candidate in
+            let dx = candidate.position.x - player.position.x
+            let dy = candidate.position.y - player.position.y
+            return sqrt(dx * dx + dy * dy) <= shockRadius
+        }
+
+        for target in nearbyFish {
+            target.removeFromParent()
+            touchingHostileFish.remove(target)
+        }
+        fish.removeAll { nearbyFish.contains($0) }
+    }
+
     private func clearLevel() {
         obstacles.forEach { $0.removeFromParent() }
         obstacles.removeAll()
@@ -333,13 +418,32 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if isShopOpen {
+            if let touch = touches.first {
+                let pointInOverlay = shopOverlay.convert(touch.location(in: self), from: self)
+                if shopOverlay.hitTestClose(pointInOverlay) {
+                    closeShop()
+                } else if shopOverlay.hitTestElectricShock(pointInOverlay) {
+                    purchaseElectricShock()
+                }
+            }
+            return
+        }
+
         if isGameOver {
             if let touch = touches.first {
                 let pointInOverlay = gameOverOverlay.convert(touch.location(in: self), from: self)
                 if gameOverOverlay.hitTestRetry(pointInOverlay) {
                     retryGame()
+                } else if gameOverOverlay.hitTestShop(pointInOverlay) {
+                    openShop()
                 }
             }
+            return
+        }
+
+        if touches.contains(where: { hitTest(shockButton, touch: $0) }) {
+            triggerElectricShock()
             return
         }
 
@@ -361,6 +465,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         endJoystickTouchIfNeeded(in: touches)
+    }
+
+    private func hitTest(_ node: SKNode, touch: UITouch) -> Bool {
+        guard let parent = node.parent else { return false }
+        let point = parent.convert(touch.location(in: self), from: self)
+        return node.contains(point)
     }
 
     private func isOnRightSide(_ touch: UITouch) -> Bool {
@@ -403,6 +513,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         updateHostileFishNibble(deltaTime: deltaTime)
 
         statsHUD.update(stats: playerStats)
+        pointsHUD.update(points: pointsManager.points)
     }
 
     private func updateHostileFishNibble(deltaTime: TimeInterval) {
@@ -412,7 +523,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         guard nibbleTimer >= nibbleInterval else { return }
         nibbleTimer = 0
 
-        playerStats.adjustDurability(by: -nibbleDamagePerFish * touchingHostileFish.count)
+        applyDurabilityDamage(nibbleDamagePerFish * touchingHostileFish.count)
+    }
+
+    private func applyDurabilityDamage(_ amount: Int) {
+        playerStats.adjustDurability(by: -amount)
 
         if playerStats.durability <= 0 {
             showGameOver()
@@ -424,6 +539,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         if categories.contains(PhysicsCategory.obstacle) {
             flash(player, backTo: .white)
+
+            if lastUpdateTime - lastObstacleHitTime >= obstacleHitCooldown {
+                lastObstacleHitTime = lastUpdateTime
+                applyDurabilityDamage(obstacleDamage)
+            }
         }
 
         if categories.contains(PhysicsCategory.hostileFish), let hostileFish = hostileFishNode(in: contact) {
@@ -433,6 +553,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         if categories.contains(PhysicsCategory.ooi) {
             let ooi = [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? OOI }.first
+            if ooi != nil {
+                pointsManager.addPoints(ooiPointValue)
+            }
             ooi?.removeFromParent()
         }
 
