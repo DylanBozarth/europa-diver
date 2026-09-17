@@ -26,6 +26,7 @@ enum WorldConstants {
 class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private let player = SKShapeNode(circleOfRadius: 12)
+    private let playerStats = PlayerStats()
     private let cameraNode = SKCameraNode()
     private let joystick = Joystick()
     private var joystickTouch: UITouch?
@@ -33,6 +34,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private let loadingOverlay = LoadingOverlay()
     private var isLoadingLevel = false
+
+    private let scannerButton = HUDButton(icon: "🔍")
+    private let lightButton = HUDButton(icon: "💡")
+    private let shieldButton = HUDButton(icon: "🛡️")
+
+    private let statsHUD = PlayerStatsHUD()
 
     private let worldTop: CGFloat = 180
     private let worldBottom: CGFloat = -180
@@ -57,6 +64,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setUpBoundaries()
         setUpPlayer()
         setUpJoystick()
+        setUpHUDButtons()
+        setUpStatsHUD()
         setUpLoadingOverlay()
         setUpMapLimits()
         generateLevel()
@@ -132,6 +141,32 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         joystick.position = CGPoint(x: size.width / 2 - 80, y: -size.height / 2 + 80)
     }
 
+    private func setUpHUDButtons() {
+        cameraNode.addChild(scannerButton)
+        cameraNode.addChild(lightButton)
+        cameraNode.addChild(shieldButton)
+        repositionHUDButtons()
+    }
+
+    private func repositionHUDButtons() {
+        let x = -size.width / 2 + 60
+        let spacing: CGFloat = 70
+        let bottomY = -size.height / 2 + 80
+
+        scannerButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
+        lightButton.position = CGPoint(x: x, y: bottomY + spacing)
+        shieldButton.position = CGPoint(x: x, y: bottomY)
+    }
+
+    private func setUpStatsHUD() {
+        cameraNode.addChild(statsHUD)
+        repositionStatsHUD()
+    }
+
+    private func repositionStatsHUD() {
+        statsHUD.position = CGPoint(x: -size.width / 2 + 20, y: size.height / 2 - 30)
+    }
+
     private func setUpLoadingOverlay() {
         cameraNode.addChild(loadingOverlay)
         loadingOverlay.resize(to: size)
@@ -140,6 +175,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
         repositionJoystick()
+        repositionHUDButtons()
+        repositionStatsHUD()
         loadingOverlay.resize(to: size)
     }
 
@@ -317,6 +354,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         let obstaclePositions = obstacles.map { $0.position }
         fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position, nearbyObstacles: obstaclePositions) }
+
+        statsHUD.update(stats: playerStats)
     }
 
     func didBegin(_ contact: SKPhysicsContact) {
