@@ -25,7 +25,8 @@ enum WorldConstants {
 
 class GameScene: SKScene, SKPhysicsContactDelegate {
 
-    private let player = SKShapeNode(circleOfRadius: 12)
+    private let player = SKSpriteNode(texture: SubmarineTexture.make(), size: CGSize(width: 44, height: 35))
+    private let playerRadius: CGFloat = 16
     private let playerStats = PlayerStats()
     private let cameraNode = SKCameraNode()
     private let joystick = Joystick()
@@ -143,11 +144,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func setUpPlayer() {
         player.position = CGPoint(x: 0, y: 0)
-        player.fillColor = .white
-        player.strokeColor = .cyan
         player.zPosition = 10
 
-        let body = SKPhysicsBody(circleOfRadius: 12)
+        let body = SKPhysicsBody(circleOfRadius: playerRadius)
         body.affectedByGravity = false
         body.linearDamping = 2.0
         body.restitution = 0.2
@@ -502,6 +501,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             let input = joystick.vector
             if input.dx != 0 || input.dy != 0 {
                 body.velocity = CGVector(dx: input.dx * moveSpeed, dy: input.dy * moveSpeed)
+                player.xScale = input.dx < 0 ? -abs(player.xScale) : abs(player.xScale)
             }
         }
 
@@ -538,7 +538,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let categories = [contact.bodyA.categoryBitMask, contact.bodyB.categoryBitMask]
 
         if categories.contains(PhysicsCategory.obstacle) {
-            flash(player, backTo: .white)
+            flashPlayerRed()
 
             if lastUpdateTime - lastObstacleHitTime >= obstacleHitCooldown {
                 lastObstacleHitTime = lastUpdateTime
@@ -574,6 +574,17 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         [contact.bodyA.node, contact.bodyB.node]
             .compactMap { $0 as? Fish }
             .first { $0.kind == .hostile }
+    }
+
+    private func flashPlayerRed() {
+        player.run(SKAction.sequence([
+            SKAction.run { [weak self] in
+                self?.player.color = .red
+                self?.player.colorBlendFactor = 0.7
+            },
+            SKAction.wait(forDuration: 0.15),
+            SKAction.run { [weak self] in self?.player.colorBlendFactor = 0 }
+        ]))
     }
 
     private func flash(_ node: SKShapeNode, backTo normalColor: SKColor) {
