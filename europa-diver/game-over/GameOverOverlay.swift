@@ -16,6 +16,7 @@ class GameOverOverlay: SKNode {
     private let retryLabel = SKLabelNode(text: "Retry")
     private let shopButton = SKShapeNode(rectOf: CGSize(width: 140, height: 50), cornerRadius: 10)
     private let shopLabel = SKLabelNode(text: "Shop")
+    private let factLabel = SKLabelNode()
 
     override init() {
         super.init()
@@ -63,10 +64,22 @@ class GameOverOverlay: SKNode {
         shopLabel.zPosition = 1
         shopButton.addChild(shopLabel)
 
+        factLabel.fontName = "Helvetica"
+        factLabel.fontSize = 13
+        factLabel.fontColor = SKColor.white.withAlphaComponent(0.7)
+        factLabel.numberOfLines = 0
+        factLabel.lineBreakMode = .byWordWrapping
+        factLabel.preferredMaxLayoutWidth = 280
+        factLabel.verticalAlignmentMode = .center
+        factLabel.horizontalAlignmentMode = .center
+        factLabel.position = CGPoint(x: 0, y: -150)
+        factLabel.zPosition = 1
+
         addChild(background)
         addChild(titleLabel)
         addChild(retryButton)
         addChild(shopButton)
+        addChild(factLabel)
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -80,7 +93,11 @@ class GameOverOverlay: SKNode {
         )
     }
 
-    func show() { isHidden = false }
+    func show() {
+        factLabel.text = facts.randomElement() ?? ""
+        isHidden = false
+    }
+
     func hide() { isHidden = true }
 
     /// `point` must be in this node's own coordinate space.
