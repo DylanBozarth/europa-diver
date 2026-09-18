@@ -22,4 +22,11 @@ class UpgradeStore {
     func markOwned(_ upgrade: Upgrade) {
         UserDefaults.standard.set(true, forKey: Self.ownedKeyPrefix + upgrade.rawValue)
     }
+
+    /// Erases every purchased upgrade. Used when starting a New Game.
+    func resetAll() {
+        for upgrade in Upgrade.allCases {
+            UserDefaults.standard.removeObject(forKey: Self.ownedKeyPrefix + upgrade.rawValue)
+        }
+    }
 }

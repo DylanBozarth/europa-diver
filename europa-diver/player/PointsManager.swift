@@ -29,4 +29,10 @@ class PointsManager {
         UserDefaults.standard.set(points, forKey: PointsManager.storageKey)
         return true
     }
+
+    /// Erases the saved point total. Used when starting a New Game.
+    func reset() {
+        points = 0
+        UserDefaults.standard.set(points, forKey: PointsManager.storageKey)
+    }
 }
