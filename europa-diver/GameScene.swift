@@ -148,6 +148,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         let body = SKPhysicsBody(circleOfRadius: playerRadius)
         body.affectedByGravity = false
+        body.allowsRotation = false
         body.linearDamping = 2.0
         body.restitution = 0.2
         body.categoryBitMask = PhysicsCategory.player
@@ -528,10 +529,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func applyDurabilityDamage(_ amount: Int) {
         playerStats.adjustDurability(by: -amount)
+        spinPlayer()
 
         if playerStats.durability <= 0 {
             showGameOver()
         }
+    }
+
+    private func spinPlayer() {
+        let spin = SKAction.rotate(byAngle: -.pi * 2, duration: 0.4)
+        player.run(spin, withKey: "damageSpin")
     }
 
     func didBegin(_ contact: SKPhysicsContact) {
@@ -589,12 +596,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func flashFishRed(_ fish: Fish) {
         fish.run(SKAction.sequence([
-            SKAction.run {
-                fish.color = .red
-                fish.colorBlendFactor = 0.7
-            },
+            SKAction.run { fish.fillColor = .red },
             SKAction.wait(forDuration: 0.15),
-            SKAction.run { fish.colorBlendFactor = 0 }
+            SKAction.run { fish.fillColor = .white }
         ]))
     }
 }

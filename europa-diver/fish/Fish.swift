@@ -11,7 +11,7 @@ enum FishKind {
     case hostile
 }
 
-class Fish: SKSpriteNode {
+class Fish: SKShapeNode {
 
     let kind: FishKind
     private let swimSpeed: CGFloat
@@ -35,24 +35,30 @@ class Fish: SKSpriteNode {
         self.roamBottom = roamBottom
         self.roamTop = roamTop
 
-        let width: CGFloat
+        let diameter: CGFloat
         switch kind {
         case .small:
-            width = 26
+            diameter = 26
             swimSpeed = 50
         case .large:
-            width = 46
+            diameter = 46
             swimSpeed = 30
         case .hostile:
-            width = 32
+            diameter = 32
             swimSpeed = 75
         }
 
-        let displaySize = CGSize(width: width, height: width * 0.8)
-        radius = width / 2
+        radius = diameter / 2
 
-        super.init(texture: FishTexture.make(for: kind, size: displaySize), color: .white, size: displaySize)
+        super.init()
         name = "fish"
+
+        // A circular silhouette filled with the fish artwork, rather than a
+        // stretched rectangular sprite — reads as a round fish body at a glance.
+        path = CGPath(ellipseIn: CGRect(x: -radius, y: -radius, width: diameter, height: diameter), transform: nil)
+        fillTexture = FishTexture.make(for: kind, size: CGSize(width: diameter, height: diameter))
+        fillColor = .white
+        lineWidth = 0
         zPosition = 5
 
         setUpPhysicsBody(radius: radius)
