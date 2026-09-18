@@ -547,7 +547,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
 
         if categories.contains(PhysicsCategory.hostileFish), let hostileFish = hostileFishNode(in: contact) {
-            flash(hostileFish, backTo: hostileFish.normalColor)
+            flashFishRed(hostileFish)
             touchingHostileFish.insert(hostileFish)
         }
 
@@ -587,11 +587,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         ]))
     }
 
-    private func flash(_ node: SKShapeNode, backTo normalColor: SKColor) {
-        node.run(SKAction.sequence([
-            SKAction.run { node.fillColor = .red },
+    private func flashFishRed(_ fish: Fish) {
+        fish.run(SKAction.sequence([
+            SKAction.run {
+                fish.color = .red
+                fish.colorBlendFactor = 0.7
+            },
             SKAction.wait(forDuration: 0.15),
-            SKAction.run { node.fillColor = normalColor }
+            SKAction.run { fish.colorBlendFactor = 0 }
         ]))
     }
 }

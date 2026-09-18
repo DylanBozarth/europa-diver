@@ -11,10 +11,9 @@ enum FishKind {
     case hostile
 }
 
-class Fish: SKShapeNode {
+class Fish: SKSpriteNode {
 
     let kind: FishKind
-    let normalColor: SKColor
     private let swimSpeed: CGFloat
     private let radius: CGFloat
 
@@ -36,46 +35,32 @@ class Fish: SKShapeNode {
         self.roamBottom = roamBottom
         self.roamTop = roamTop
 
-        let size: CGFloat
+        let width: CGFloat
         switch kind {
         case .small:
-            size = 10
+            width = 26
             swimSpeed = 50
         case .large:
-            size = 26
+            width = 46
             swimSpeed = 30
         case .hostile:
-            size = 16
+            width = 32
             swimSpeed = 75
         }
 
-        normalColor = Fish.color(for: kind)
-        radius = size / 2
+        let displaySize = CGSize(width: width, height: width * 0.8)
+        radius = width / 2
 
-        super.init()
+        super.init(texture: FishTexture.make(for: kind, size: displaySize), color: .white, size: displaySize)
         name = "fish"
-
-        let path = CGMutablePath()
-        path.addEllipse(in: CGRect(x: -size / 2, y: -size / 4, width: size, height: size / 2))
-        self.path = path
-        fillColor = normalColor
-        strokeColor = .yellow
         zPosition = 5
 
-        setUpPhysicsBody(radius: size / 2)
+        setUpPhysicsBody(radius: radius)
         pickNewDirection()
     }
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    private static func color(for kind: FishKind) -> SKColor {
-        switch kind {
-        case .small: return .orange
-        case .large: return SKColor(red: 0.55, green: 0.35, blue: 0.2, alpha: 1.0)
-        case .hostile: return .purple
-        }
     }
 
     private func setUpPhysicsBody(radius: CGFloat) {
