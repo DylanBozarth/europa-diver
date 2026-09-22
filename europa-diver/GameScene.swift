@@ -43,6 +43,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let shockRadius: CGFloat = 100
     private let shockPowerCost = 20
 
+    private let surveyLog = SurveyLog()
+    private let scanRadius: CGFloat = 100
+    private let scanProgressBar = ScanProgressBar()
+    private var scanTarget: Fish?
+    private var scanElapsed: TimeInterval = 0
+    private let scanDuration: TimeInterval = 3.0
+    private let scanRewardPoints = 300
+
     private let statsHUD = PlayerStatsHUD()
 
     private let pointsManager = PointsManager()
@@ -158,6 +166,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         addChild(player)
         cameraNode.position = player.position
+
+        addChild(scanProgressBar)
     }
 
     private func setUpJoystick() {
@@ -352,6 +362,66 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         fish.removeAll { nearbyFish.contains($0) }
     }
 
+    private func startScan() {
+        guard scanTarget == nil else { return }
+
+        let target = fish.first { candidate in
+            guard !surveyLog.hasScanned(candidate.kind) else { return false }
+            let dx = candidate.position.x - player.position.x
+            let dy = candidate.position.y - player.position.y
+            return sqrt(dx * dx + dy * dy) <= scanRadius
+        }
+        guard let target else { return }
+
+        scanTarget = target
+        scanElapsed = 0
+        scanProgressBar.setProgress(0)
+        scanProgressBar.show()
+    }
+
+    private func updateScan(deltaTime: TimeInterval) {
+        guard let target = scanTarget else { return }
+
+        guard fish.contains(target) else {
+            cancelScan()
+            return
+        }
+
+        let dx = target.position.x - player.position.x
+        let dy = target.position.y - player.position.y
+        let distance = sqrt(dx * dx + dy * dy)
+        guard distance <= scanRadius else {
+            cancelScan()
+            return
+        }
+
+        scanElapsed += deltaTime
+        scanProgressBar.setProgress(CGFloat(scanElapsed / scanDuration))
+
+        if scanElapsed >= scanDuration {
+            completeScan(for: target)
+        }
+    }
+
+    private func completeScan(for target: Fish) {
+        surveyLog.markScanned(target.kind)
+        pointsManager.addPoints(scanRewardPoints)
+
+        let facing: CGFloat = player.xScale < 0 ? -1 : 1
+        let effectPosition = CGPoint(x: player.position.x + facing * (playerRadius + 20), y: player.position.y)
+        ScanEffect.spawn(at: effectPosition, in: self)
+
+        scanTarget = nil
+        scanElapsed = 0
+        scanProgressBar.hide()
+    }
+
+    private func cancelScan() {
+        scanTarget = nil
+        scanElapsed = 0
+        scanProgressBar.hide()
+    }
+
     private func clearLevel() {
         obstacles.forEach { $0.removeFromParent() }
         obstacles.removeAll()
@@ -360,6 +430,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         fish.removeAll()
         touchingHostileFish.removeAll()
         nibbleTimer = 0
+        cancelScan()
 
         children
             .filter { $0.name == "ooi" || $0.name == "emptySlot" }
@@ -447,6 +518,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
+        if touches.contains(where: { hitTest(scannerButton, touch: $0) }) {
+            startScan()
+            return
+        }
+
         guard joystickTouch == nil else { return }
         guard let touch = touches.first(where: isOnRightSide) else { return }
 
@@ -507,11 +583,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
 
         cameraNode.position.x = player.position.x
+        scanProgressBar.position = CGPoint(x: player.position.x, y: player.position.y + playerRadius + 15)
 
         let obstaclePositions = obstacles.map { $0.position }
         fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position, nearbyObstacles: obstaclePositions) }
 
         updateHostileFishNibble(deltaTime: deltaTime)
+        updateScan(deltaTime: deltaTime)
 
         statsHUD.update(stats: playerStats)
         pointsHUD.update(points: pointsManager.points)

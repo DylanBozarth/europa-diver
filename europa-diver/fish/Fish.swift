@@ -5,7 +5,7 @@
 
 import SpriteKit
 
-enum FishKind {
+enum FishKind: String {
     case small
     case large
     case hostile
