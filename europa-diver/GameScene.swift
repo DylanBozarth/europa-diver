@@ -33,6 +33,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var joystickTouch: UITouch?
     private let moveSpeed: CGFloat = 160
 
+    private var pressedButtonTouches: [UITouch: HUDButton] = [:]
+
     private let loadingOverlay = LoadingOverlay()
     private var isLoadingLevel = false
 
@@ -185,7 +187,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         cameraNode.addChild(shieldButton)
         cameraNode.addChild(shockButton)
         repositionHUDButtons()
-        refreshShockButtonAvailability()
+        refreshAbilityButtonVisibility()
     }
 
     private func repositionHUDButtons() {
@@ -193,14 +195,20 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let spacing: CGFloat = 70
         let bottomY = -size.height / 2 + 80
 
-        scannerButton.position = CGPoint(x: x, y: bottomY + spacing * 3)
-        lightButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
-        shieldButton.position = CGPoint(x: x, y: bottomY + spacing)
-        shockButton.position = CGPoint(x: x, y: bottomY)
+        // Scan is the one button always available, so it anchors the bottom-left
+        // corner; the upgrade-gated buttons (often hidden) stack above it.
+        scannerButton.position = CGPoint(x: x, y: bottomY)
+        lightButton.position = CGPoint(x: x, y: bottomY + spacing)
+        shieldButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
+        shockButton.position = CGPoint(x: x, y: bottomY + spacing * 3)
     }
 
-    private func refreshShockButtonAvailability() {
-        shockButton.alpha = upgradeStore.isOwned(.electricShock) ? 1.0 : 0.4
+    private func refreshAbilityButtonVisibility() {
+        // The scan button is a base ability and is always available; the rest
+        // only show once their corresponding upgrade has been purchased.
+        shockButton.isHidden = !upgradeStore.isOwned(.electricShock)
+        lightButton.isHidden = !upgradeStore.isOwned(.light)
+        shieldButton.isHidden = !upgradeStore.isOwned(.shield)
     }
 
     private func setUpStatsHUD() {
@@ -340,7 +348,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         upgradeStore.markOwned(.electricShock)
         pointsHUD.update(points: pointsManager.points)
         shopOverlay.updateElectricShock(owned: true, cost: electricShockCost)
-        refreshShockButtonAvailability()
+        refreshAbilityButtonVisibility()
     }
 
     private func triggerElectricShock() {
@@ -513,12 +521,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
-        if touches.contains(where: { hitTest(shockButton, touch: $0) }) {
+        if let touch = touches.first(where: { hitTest(shockButton, touch: $0) }) {
+            shockButton.setPressed(true)
+            pressedButtonTouches[touch] = shockButton
             triggerElectricShock()
             return
         }
 
-        if touches.contains(where: { hitTest(scannerButton, touch: $0) }) {
+        if let touch = touches.first(where: { hitTest(scannerButton, touch: $0) }) {
+            scannerButton.setPressed(true)
+            pressedButtonTouches[touch] = scannerButton
             startScan()
             return
         }
@@ -537,10 +549,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         endJoystickTouchIfNeeded(in: touches)
+        releasePressedButtons(for: touches)
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         endJoystickTouchIfNeeded(in: touches)
+        releasePressedButtons(for: touches)
+    }
+
+    private func releasePressedButtons(for touches: Set<UITouch>) {
+        for touch in touches {
+            guard let button = pressedButtonTouches.removeValue(forKey: touch) else { continue }
+            button.setPressed(false)
+        }
     }
 
     private func hitTest(_ node: SKNode, touch: UITouch) -> Bool {

@@ -24,6 +24,7 @@ class MainMenuScene: SKScene {
 
     private let pointsManager = PointsManager()
     private let upgradeStore = UpgradeStore()
+    private let surveyLog = SurveyLog()
     private let electricShockCost = 50
 
     override func didMove(to view: SKView) {
@@ -116,6 +117,7 @@ class MainMenuScene: SKScene {
     private func startNewGame() {
         pointsManager.reset()
         upgradeStore.resetAll()
+        surveyLog.resetAll()
         startGame()
     }
 

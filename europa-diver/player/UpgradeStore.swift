@@ -10,6 +10,8 @@ import Foundation
 
 enum Upgrade: String, CaseIterable {
     case electricShock
+    case light
+    case shield
 }
 
 class UpgradeStore {

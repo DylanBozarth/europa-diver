@@ -18,4 +18,11 @@ class SurveyLog {
     func markScanned(_ kind: FishKind) {
         UserDefaults.standard.set(true, forKey: Self.keyPrefix + kind.rawValue)
     }
+
+    /// Erases every scanned species. Used when starting a New Game.
+    func resetAll() {
+        for kind in FishKind.allCases {
+            UserDefaults.standard.removeObject(forKey: Self.keyPrefix + kind.rawValue)
+        }
+    }
 }
