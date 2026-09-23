@@ -46,6 +46,7 @@ struct LevelGenerator {
     var fishSpacing: ClosedRange<CGFloat> = 150...300
     var ooiSpacing: ClosedRange<CGFloat> = 300...600
     var emptySlotSpacing: ClosedRange<CGFloat> = 500...900
+    var includeHostileFish: Bool = true
 
     private let fishRoamHalfWidth: CGFloat = 60
 
@@ -90,6 +91,10 @@ struct LevelGenerator {
     }
 
     private func randomFishKind() -> FishKind {
+        guard includeHostileFish else {
+            return Int.random(in: 0..<100) < 60 ? .small : .large
+        }
+
         switch Int.random(in: 0..<100) {
         case 0..<60: return .small
         case 60..<90: return .large

@@ -88,6 +88,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var fish: [Fish] = []
     private var levelEntrance: LevelEntrance?
     private var lastUpdateTime: TimeInterval = 0
+    private var isFirstLevel = true
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.02, green: 0.08, blue: 0.18, alpha: 1.0)
@@ -107,19 +108,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setUpGameOverOverlay()
         setUpShopOverlay()
         setUpMapLimits()
+        setUpIceRoof()
         generateLevel()
         setUpLevelEntrance()
     }
 
     private func setUpBoundaries() {
-        for y in [worldTop, worldBottom] {
-            let wall = SKNode()
-            wall.position = CGPoint(x: 0, y: y)
-            wall.physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: -100_000, y: 0), to: CGPoint(x: 100_000, y: 0))
-            wall.physicsBody?.categoryBitMask = PhysicsCategory.wall
-            wall.physicsBody?.collisionBitMask = PhysicsCategory.player
-            addChild(wall)
-        }
+        let floor = SKNode()
+        floor.position = CGPoint(x: 0, y: worldBottom)
+        floor.physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: -100_000, y: 0), to: CGPoint(x: 100_000, y: 0))
+        floor.physicsBody?.categoryBitMask = PhysicsCategory.wall
+        floor.physicsBody?.collisionBitMask = PhysicsCategory.player
+        addChild(floor)
     }
 
     private func setUpMapLimits() {
@@ -129,6 +129,54 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         addBoundaryWall(at: worldMinX)
         addBoundaryWall(at: worldMaxX)
+    }
+
+    /// Tutorial-only ice ceiling. The patch above spawn is visually marked as
+    /// thinner ice (where the sub "came in from"), but the whole roof is
+    /// solid — nothing passes through it, including that patch.
+    private func setUpIceRoof() {
+        let squareSize: CGFloat = 40
+        let holePatchHalfWidth: CGFloat = 40
+
+        var x = worldMinX
+        while x < worldMaxX {
+            let squareCenter = x + squareSize / 2
+            let isHolePatch = squareCenter >= -holePatchHalfWidth && squareCenter <= holePatchHalfWidth
+
+            let square = SKShapeNode(rectOf: CGSize(width: squareSize, height: squareSize))
+            square.name = "iceRoof"
+            square.fillColor = isHolePatch
+                ? SKColor(red: 0.85, green: 0.98, blue: 1.0, alpha: 0.5)
+                : SKColor(red: 0.75, green: 0.92, blue: 1.0, alpha: 0.9)
+            square.strokeColor = .white
+            square.lineWidth = 1
+            square.position = CGPoint(x: squareCenter, y: worldTop)
+            square.zPosition = 8
+            addChild(square)
+
+            x += squareSize
+        }
+
+        let edge = SKNode()
+        edge.name = "iceRoof"
+        edge.position = CGPoint(x: 0, y: worldTop)
+        edge.physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: worldMinX, y: 0), to: CGPoint(x: worldMaxX, y: 0))
+        edge.physicsBody?.categoryBitMask = PhysicsCategory.wall
+        edge.physicsBody?.collisionBitMask = PhysicsCategory.player
+        addChild(edge)
+    }
+
+    /// Swaps the tutorial's visible ice ceiling for a plain invisible one, so
+    /// later levels stay capped without the level-1-only visual.
+    private func removeIceRoof() {
+        children.filter { $0.name == "iceRoof" }.forEach { $0.removeFromParent() }
+
+        let ceiling = SKNode()
+        ceiling.position = CGPoint(x: 0, y: worldTop)
+        ceiling.physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: -100_000, y: 0), to: CGPoint(x: 100_000, y: 0))
+        ceiling.physicsBody?.categoryBitMask = PhysicsCategory.wall
+        ceiling.physicsBody?.collisionBitMask = PhysicsCategory.player
+        addChild(ceiling)
     }
 
     private func addBoundaryWall(at x: CGFloat) {
@@ -257,12 +305,22 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func generateLevel() {
-        let layout = LevelGenerator(
-            worldMinX: worldMinX,
-            worldMaxX: worldMaxX,
-            worldBottom: worldBottom,
-            worldTop: worldTop
-        ).generate()
+        let layout: LevelLayout
+        if isFirstLevel {
+            layout = TutorialLevelGenerator(
+                worldMinX: worldMinX,
+                worldMaxX: worldMaxX,
+                worldBottom: worldBottom,
+                worldTop: worldTop
+            ).generate()
+        } else {
+            layout = LevelGenerator(
+                worldMinX: worldMinX,
+                worldMaxX: worldMaxX,
+                worldBottom: worldBottom,
+                worldTop: worldTop
+            ).generate()
+        }
 
         for slot in layout.obstacles {
             addObstacle(at: slot.position)
@@ -288,6 +346,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private func enterNextLevel() {
         guard !isLoadingLevel else { return }
         isLoadingLevel = true
+
+        if isFirstLevel {
+            isFirstLevel = false
+            removeIceRoof()
+        }
 
         player.physicsBody?.velocity = .zero
         loadingOverlay.show()
