@@ -14,6 +14,7 @@ enum FishKind: String, CaseIterable {
 class Fish: SKShapeNode {
 
     let kind: FishKind
+    let appearanceIndex: Int
     private let swimSpeed: CGFloat
     private let radius: CGFloat
 
@@ -28,8 +29,16 @@ class Fish: SKShapeNode {
     private let avoidRadius: CGFloat = 70
     private let avoidStrength: CGFloat = 1.5
 
-    init(kind: FishKind, roamLeft: CGFloat, roamRight: CGFloat, roamBottom: CGFloat, roamTop: CGFloat) {
+    /// Uniquely identifies this fish's look for scanning purposes — e.g. the
+    /// large red fish and the small red fish are different species even
+    /// though they might share a palette, because `kind` differs too.
+    var speciesID: String {
+        "\(kind.rawValue)-\(appearanceIndex)"
+    }
+
+    init(kind: FishKind, appearanceIndex: Int, roamLeft: CGFloat, roamRight: CGFloat, roamBottom: CGFloat, roamTop: CGFloat) {
         self.kind = kind
+        self.appearanceIndex = appearanceIndex
         self.roamLeft = roamLeft
         self.roamRight = roamRight
         self.roamBottom = roamBottom
@@ -56,7 +65,7 @@ class Fish: SKShapeNode {
         // A circular silhouette filled with the fish artwork, rather than a
         // stretched rectangular sprite — reads as a round fish body at a glance.
         path = CGPath(ellipseIn: CGRect(x: -radius, y: -radius, width: diameter, height: diameter), transform: nil)
-        fillTexture = FishTexture.make(for: kind, size: CGSize(width: diameter, height: diameter))
+        fillTexture = FishTexture.make(for: kind, appearanceIndex: appearanceIndex, size: CGSize(width: diameter, height: diameter))
         fillColor = .white
         lineWidth = 0
         zPosition = 5

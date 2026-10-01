@@ -326,7 +326,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             addObstacle(at: slot.position)
         }
         for slot in layout.fishSlots {
-            addFish(kind: slot.kind, at: slot.position, roamHalfWidth: slot.roamHalfWidth)
+            addFish(kind: slot.kind, appearanceIndex: slot.appearanceIndex, at: slot.position, roamHalfWidth: slot.roamHalfWidth)
         }
         for slot in layout.ooiSlots {
             addOOI(at: slot.position)
@@ -437,7 +437,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         guard scanTarget == nil else { return }
 
         let target = fish.first { candidate in
-            guard !surveyLog.hasScanned(candidate.kind) else { return false }
+            guard !surveyLog.hasScanned(candidate.speciesID) else { return false }
             let dx = candidate.position.x - player.position.x
             let dy = candidate.position.y - player.position.y
             return sqrt(dx * dx + dy * dy) <= scanRadius
@@ -475,7 +475,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func completeScan(for target: Fish) {
-        surveyLog.markScanned(target.kind)
+        surveyLog.markScanned(target.speciesID)
         pointsManager.addPoints(scanRewardPoints)
 
         let facing: CGFloat = player.xScale < 0 ? -1 : 1
@@ -529,13 +529,20 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         obstacles.append(rock)
     }
 
-    private func addFish(kind: FishKind, at position: CGPoint, roamHalfWidth: CGFloat) {
+    private func addFish(kind: FishKind, appearanceIndex: Int, at position: CGPoint, roamHalfWidth: CGFloat) {
         let roamLeft = max(position.x - roamHalfWidth, worldMinX)
         let roamRight = min(position.x + roamHalfWidth, worldMaxX)
         let roamBottom = worldBottom + 20
         let roamTop = worldTop - 20
 
-        let newFish = Fish(kind: kind, roamLeft: roamLeft, roamRight: roamRight, roamBottom: roamBottom, roamTop: roamTop)
+        let newFish = Fish(
+            kind: kind,
+            appearanceIndex: appearanceIndex,
+            roamLeft: roamLeft,
+            roamRight: roamRight,
+            roamBottom: roamBottom,
+            roamTop: roamTop
+        )
         newFish.position = position
 
         addChild(newFish)

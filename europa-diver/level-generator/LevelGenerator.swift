@@ -18,6 +18,10 @@ struct LevelLayout {
         let position: CGPoint
         let kind: FishKind
         let roamHalfWidth: CGFloat
+        /// Which look to use — a FishPalette index for small/large, or a
+        /// hostile variant index for hostile. Combined with `kind`, this is
+        /// also the fish's scan-species identity (see Fish.speciesID).
+        let appearanceIndex: Int
     }
 
     struct OOISlot {
@@ -47,6 +51,7 @@ struct LevelGenerator {
     var ooiSpacing: ClosedRange<CGFloat> = 300...600
     var emptySlotSpacing: ClosedRange<CGFloat> = 500...900
     var includeHostileFish: Bool = true
+    var maxPassiveFishTypesPerLevel: Int = 4
 
     private let fishRoamHalfWidth: CGFloat = 60
 
@@ -81,11 +86,28 @@ struct LevelGenerator {
     }
 
     private func generateFish() -> [LevelLayout.FishSlot] {
-        positions(spacing: fishSpacing).map {
-            LevelLayout.FishSlot(
-                position: CGPoint(x: $0, y: randomY(margin: 20)),
-                kind: randomFishKind(),
-                roamHalfWidth: fishRoamHalfWidth
+        // Restricts passive (small/large) fish to a handful of palettes per
+        // level, drawn fresh each time, so one level doesn't show every
+        // possible species at once. Hostile fish aren't subject to this.
+        let availablePalettes = Array(0..<FishPalette.all.count)
+            .shuffled()
+            .prefix(maxPassiveFishTypesPerLevel)
+
+        return positions(spacing: fishSpacing).map { x in
+            let kind = randomFishKind()
+            let appearanceIndex: Int
+            if kind == .hostile {
+                // Hostile variants aren't restricted per level.
+                appearanceIndex = Int.random(in: 0..<FishTexture.hostileVariantCount)
+            } else {
+                appearanceIndex = availablePalettes.randomElement() ?? 0
+            }
+
+            return LevelLayout.FishSlot(
+                position: CGPoint(x: x, y: randomY(margin: 20)),
+                kind: kind,
+                roamHalfWidth: fishRoamHalfWidth,
+                appearanceIndex: appearanceIndex
             )
         }
     }

@@ -2,22 +2,38 @@
 //  FishTexture.swift
 //  europa-diver
 //
-//  Renders the SwiftUI fish icons (friendly-fish.swift, fat-fish.swift,
-//  hostile-fish.swift) into SKTextures so they can be used as sprites.
+//  Renders fish icons into SKTextures so they can be used as sprites.
+//  `appearanceIndex` picks which look to use — a FishPalette index for
+//  passive (small/large) fish, or a hostile variant index for hostile fish —
+//  and is chosen once at spawn (see LevelGenerator) so it stays fixed for
+//  that fish's lifetime and can double as its scan-species identity.
 //
 
 import SwiftUI
 import SpriteKit
 
 enum FishTexture {
-    static func make(for kind: FishKind, size: CGSize) -> SKTexture {
+    static let hostileVariantCount = 3
+
+    static func make(for kind: FishKind, appearanceIndex: Int, size: CGSize) -> SKTexture {
         switch kind {
         case .small:
-            return render(AlienFishIcon(), size: size)
+            let palette = FishPalette.all[appearanceIndex % FishPalette.all.count]
+            return render(SlimFishIcon(palette: palette), size: size)
         case .large:
-            return render(FloaterFishIcon(), size: size)
+            let palette = FishPalette.all[appearanceIndex % FishPalette.all.count]
+            return render(BulkyFishIcon(palette: palette), size: size)
         case .hostile:
-            return render(HostileFishIcon(), size: size)
+            return render(hostileIcon(for: appearanceIndex), size: size)
+        }
+    }
+
+    @ViewBuilder
+    private static func hostileIcon(for index: Int) -> some View {
+        switch index % hostileVariantCount {
+        case 0: HostileFishIcon()
+        case 1: HostileFishIconB()
+        default: HostileFishIconC()
         }
     }
 
