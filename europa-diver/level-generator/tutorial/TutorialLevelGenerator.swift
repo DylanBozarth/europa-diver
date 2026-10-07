@@ -24,6 +24,7 @@ struct TutorialLevelGenerator {
         )
         generator.includeHostileFish = false
         generator.includeSnakes = false
+        generator.includeSmallSnakes = false
         return generator.generate()
     }
 }

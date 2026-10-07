@@ -18,6 +18,7 @@ struct PhysicsCategory {
     static let ooi: UInt32 = 0x1 << 6
     static let levelEntrance: UInt32 = 0x1 << 7
     static let snake: UInt32 = 0x1 << 8
+    static let smallSnake: UInt32 = 0x1 << 9
 }
 
 enum WorldConstants {
@@ -88,6 +89,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var obstacles: [SKShapeNode] = []
     private var fish: [Fish] = []
     private var snakes: [Snake] = []
+    private var smallSnakes: [SmallSnake] = []
     private var levelEntrance: LevelEntrance?
     private var lastUpdateTime: TimeInterval = 0
     private var isFirstLevel = true
@@ -344,6 +346,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         for slot in layout.snakeSlots {
             addSnake(at: slot.position)
         }
+        for slot in layout.smallSnakeSlots {
+            addSmallSnake(at: slot.position)
+        }
     }
 
     private func setUpLevelEntrance() {
@@ -518,6 +523,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         touchingSnakes.removeAll()
         snakeDamageTimer = 0
 
+        smallSnakes.forEach { $0.removeFromParent() }
+        smallSnakes.removeAll()
+
         children
             .filter { $0.name == "ooi" || $0.name == "emptySlot" }
             .forEach { $0.removeFromParent() }
@@ -570,6 +578,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         addChild(snake)
         snakes.append(snake)
+    }
+
+    private func addSmallSnake(at position: CGPoint) {
+        let smallSnake = SmallSnake()
+        smallSnake.position = position
+
+        addChild(smallSnake)
+        smallSnakes.append(smallSnake)
     }
 
     private func addOOI(at position: CGPoint) {
@@ -670,6 +686,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         touch.location(in: self).x > cameraNode.position.x
     }
 
+    /// Whether `position` falls within the camera's current visible area.
+    /// Camera.y never moves from 0, so this is just a centered rect around
+    /// camera.x at the scene's current size.
+    private func isOnScreen(_ position: CGPoint) -> Bool {
+        let halfWidth = size.width / 2
+        let halfHeight = size.height / 2
+        return position.x >= cameraNode.position.x - halfWidth
+            && position.x <= cameraNode.position.x + halfWidth
+            && position.y >= cameraNode.position.y - halfHeight
+            && position.y <= cameraNode.position.y + halfHeight
+    }
+
     private func updateJoystick(with touch: UITouch) {
         let scenePoint = touch.location(in: self)
         let localPoint = joystick.convert(scenePoint, from: self)
@@ -702,6 +730,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let obstaclePositions = obstacles.map { $0.position }
         fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position, nearbyObstacles: obstaclePositions) }
         snakes.forEach { $0.update(deltaTime: deltaTime) }
+        smallSnakes.forEach { smallSnake in
+            smallSnake.update(
+                deltaTime: deltaTime,
+                playerPosition: player.position,
+                isOnScreen: isOnScreen(smallSnake.position),
+                nearbyObstacles: obstaclePositions,
+                worldMinX: worldMinX,
+                worldMaxX: worldMaxX,
+                worldBottom: worldBottom,
+                worldTop: worldTop
+            )
+        }
 
         updateHostileFishNibble(deltaTime: deltaTime)
         updateSnakeDamage(deltaTime: deltaTime)

@@ -38,11 +38,16 @@ struct LevelLayout {
         let position: CGPoint
     }
 
+    struct SmallSnakeSlot {
+        let position: CGPoint
+    }
+
     let obstacles: [ObstacleSlot]
     let fishSlots: [FishSlot]
     let ooiSlots: [OOISlot]
     let emptySlots: [EmptySlot]
     let snakeSlots: [SnakeSlot]
+    let smallSnakeSlots: [SmallSnakeSlot]
 }
 
 struct LevelGenerator {
@@ -59,6 +64,8 @@ struct LevelGenerator {
     var maxPassiveFishTypesPerLevel: Int = 4
     var snakeSpacing: ClosedRange<CGFloat> = 2000...4000
     var includeSnakes: Bool = true
+    var smallSnakeSpacing: ClosedRange<CGFloat> = 1200...2500
+    var includeSmallSnakes: Bool = true
 
     private let fishRoamHalfWidth: CGFloat = 60
 
@@ -68,7 +75,8 @@ struct LevelGenerator {
             fishSlots: generateFish(),
             ooiSlots: generateOOIs(),
             emptySlots: generateEmptySlots(),
-            snakeSlots: generateSnakes()
+            snakeSlots: generateSnakes(),
+            smallSnakeSlots: generateSmallSnakes()
         )
     }
 
@@ -149,6 +157,14 @@ struct LevelGenerator {
 
         return positions(spacing: snakeSpacing).map {
             LevelLayout.SnakeSlot(position: CGPoint(x: $0, y: randomY(margin: 60)))
+        }
+    }
+
+    private func generateSmallSnakes() -> [LevelLayout.SmallSnakeSlot] {
+        guard includeSmallSnakes else { return [] }
+
+        return positions(spacing: smallSnakeSpacing).map {
+            LevelLayout.SmallSnakeSlot(position: CGPoint(x: $0, y: randomY(margin: 30)))
         }
     }
 }
