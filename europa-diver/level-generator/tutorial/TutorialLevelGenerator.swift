@@ -3,8 +3,8 @@
 //  europa-diver
 //
 //  Layout for the very first level: the same generation engine as
-//  LevelGenerator, but with no hostile fish, so the player can learn to
-//  move, scan, and collect without being chased or damaged.
+//  LevelGenerator, but with no hostile fish and no snakes, so the player can
+//  learn to move, scan, and collect without being chased or damaged.
 //
 
 import CoreGraphics
@@ -23,6 +23,7 @@ struct TutorialLevelGenerator {
             worldTop: worldTop
         )
         generator.includeHostileFish = false
+        generator.includeSnakes = false
         return generator.generate()
     }
 }

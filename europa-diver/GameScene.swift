@@ -17,6 +17,7 @@ struct PhysicsCategory {
     static let hostileFish: UInt32 = 0x1 << 5
     static let ooi: UInt32 = 0x1 << 6
     static let levelEntrance: UInt32 = 0x1 << 7
+    static let snake: UInt32 = 0x1 << 8
 }
 
 enum WorldConstants {
@@ -86,9 +87,15 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private var obstacles: [SKShapeNode] = []
     private var fish: [Fish] = []
+    private var snakes: [Snake] = []
     private var levelEntrance: LevelEntrance?
     private var lastUpdateTime: TimeInterval = 0
     private var isFirstLevel = true
+
+    private var touchingSnakes: Set<Snake> = []
+    private var snakeDamageTimer: TimeInterval = 0
+    private let snakeDamageInterval: TimeInterval = 0.5
+    private let snakeDamagePerTick = 15
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.02, green: 0.08, blue: 0.18, alpha: 1.0)
@@ -211,7 +218,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         body.restitution = 0.2
         body.categoryBitMask = PhysicsCategory.player
         body.collisionBitMask = PhysicsCategory.obstacle | PhysicsCategory.wall
-        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.largeFish | PhysicsCategory.hostileFish | PhysicsCategory.ooi | PhysicsCategory.levelEntrance
+        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.largeFish | PhysicsCategory.hostileFish | PhysicsCategory.ooi | PhysicsCategory.levelEntrance | PhysicsCategory.snake
         player.physicsBody = body
 
         addChild(player)
@@ -333,6 +340,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         for slot in layout.emptySlots {
             addEmptySlot(at: slot.position)
+        }
+        for slot in layout.snakeSlots {
+            addSnake(at: slot.position)
         }
     }
 
@@ -503,6 +513,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         nibbleTimer = 0
         cancelScan()
 
+        snakes.forEach { $0.removeFromParent() }
+        snakes.removeAll()
+        touchingSnakes.removeAll()
+        snakeDamageTimer = 0
+
         children
             .filter { $0.name == "ooi" || $0.name == "emptySlot" }
             .forEach { $0.removeFromParent() }
@@ -547,6 +562,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         addChild(newFish)
         fish.append(newFish)
+    }
+
+    private func addSnake(at position: CGPoint) {
+        let snake = Snake()
+        snake.position = position
+
+        addChild(snake)
+        snakes.append(snake)
     }
 
     private func addOOI(at position: CGPoint) {
@@ -678,8 +701,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         let obstaclePositions = obstacles.map { $0.position }
         fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position, nearbyObstacles: obstaclePositions) }
+        snakes.forEach { $0.update(deltaTime: deltaTime) }
 
         updateHostileFishNibble(deltaTime: deltaTime)
+        updateSnakeDamage(deltaTime: deltaTime)
         updateScan(deltaTime: deltaTime)
 
         statsHUD.update(stats: playerStats)
@@ -694,6 +719,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         nibbleTimer = 0
 
         applyDurabilityDamage(nibbleDamagePerFish * touchingHostileFish.count)
+    }
+
+    private func updateSnakeDamage(deltaTime: TimeInterval) {
+        guard !touchingSnakes.isEmpty else { return }
+
+        snakeDamageTimer += deltaTime
+        guard snakeDamageTimer >= snakeDamageInterval else { return }
+        snakeDamageTimer = 0
+
+        applyDurabilityDamage(snakeDamagePerTick * touchingSnakes.count)
     }
 
     private func applyDurabilityDamage(_ amount: Int) {
@@ -727,6 +762,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             touchingHostileFish.insert(hostileFish)
         }
 
+        if categories.contains(PhysicsCategory.snake), let snake = snakeNode(in: contact) {
+            touchingSnakes.insert(snake)
+        }
+
         if categories.contains(PhysicsCategory.ooi) {
             let ooi = [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? OOI }.first
             if ooi != nil {
@@ -742,8 +781,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     func didEnd(_ contact: SKPhysicsContact) {
         let categories = [contact.bodyA.categoryBitMask, contact.bodyB.categoryBitMask]
-        guard categories.contains(PhysicsCategory.hostileFish), let hostileFish = hostileFishNode(in: contact) else { return }
-        touchingHostileFish.remove(hostileFish)
+
+        if categories.contains(PhysicsCategory.hostileFish), let hostileFish = hostileFishNode(in: contact) {
+            touchingHostileFish.remove(hostileFish)
+        }
+
+        if categories.contains(PhysicsCategory.snake), let snake = snakeNode(in: contact) {
+            touchingSnakes.remove(snake)
+        }
+    }
+
+    private func snakeNode(in contact: SKPhysicsContact) -> Snake? {
+        [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? Snake }.first
     }
 
     private func hostileFishNode(in contact: SKPhysicsContact) -> Fish? {
@@ -765,9 +814,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func flashFishRed(_ fish: Fish) {
         fish.run(SKAction.sequence([
-            SKAction.run { fish.fillColor = .red },
+            SKAction.run {
+                fish.color = .red
+                fish.colorBlendFactor = 0.7
+            },
             SKAction.wait(forDuration: 0.15),
-            SKAction.run { fish.fillColor = .white }
+            SKAction.run { fish.colorBlendFactor = 0 }
         ]))
     }
 }
