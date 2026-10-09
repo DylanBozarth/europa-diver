@@ -729,7 +729,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         let obstaclePositions = obstacles.map { $0.position }
         fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position, nearbyObstacles: obstaclePositions) }
-        snakes.forEach { $0.update(deltaTime: deltaTime) }
+        snakes.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position) }
         smallSnakes.forEach { smallSnake in
             smallSnake.update(
                 deltaTime: deltaTime,
