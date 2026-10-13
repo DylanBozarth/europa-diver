@@ -28,7 +28,6 @@ class MainMenuScene: SKScene {
     private let pointsManager = PointsManager()
     private let upgradeStore = UpgradeStore()
     private let surveyLog = SurveyLog()
-    private let electricShockCost = 50
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.02, green: 0.08, blue: 0.18, alpha: 1.0)
@@ -107,7 +106,7 @@ class MainMenuScene: SKScene {
     }
 
     private func openShop() {
-        shopOverlay.updateElectricShock(owned: upgradeStore.isOwned(.electricShock), cost: electricShockCost)
+        shopOverlay.refresh(points: pointsManager.points, upgradeStore: upgradeStore)
         shopOverlay.show()
         isShopOpen = true
     }
@@ -117,12 +116,12 @@ class MainMenuScene: SKScene {
         isShopOpen = false
     }
 
-    private func purchaseElectricShock() {
-        guard !upgradeStore.isOwned(.electricShock) else { return }
-        guard pointsManager.spendPoints(electricShockCost) else { return }
+    private func purchase(_ upgrade: Upgrade) {
+        guard let cost = upgradeStore.nextLevelCost(upgrade) else { return }
+        guard pointsManager.spendPoints(cost) else { return }
 
-        upgradeStore.markOwned(.electricShock)
-        shopOverlay.updateElectricShock(owned: true, cost: electricShockCost)
+        upgradeStore.levelUp(upgrade)
+        shopOverlay.refresh(points: pointsManager.points, upgradeStore: upgradeStore)
     }
 
     private func openNewGameOverlay() {
@@ -157,8 +156,8 @@ class MainMenuScene: SKScene {
             let pointInOverlay = shopOverlay.convert(point, from: self)
             if shopOverlay.hitTestClose(pointInOverlay) {
                 closeShop()
-            } else if shopOverlay.hitTestElectricShock(pointInOverlay) {
-                purchaseElectricShock()
+            } else if let upgrade = shopOverlay.hitTestUpgrade(pointInOverlay) {
+                purchase(upgrade)
             }
             return
         }

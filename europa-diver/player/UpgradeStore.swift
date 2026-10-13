@@ -2,8 +2,12 @@
 //  UpgradeStore.swift
 //  europa-diver
 //
-//  Tracks which submarine upgrades have been purchased. Persists across
+//  Tracks each submarine upgrade's purchased level. Persists across
 //  retries and app relaunches (backed by UserDefaults), same as points.
+//
+//  Levels track what's been bought and what it costs; Speed and Durability
+//  are wired to actual gameplay effects (see GameScene), the rest only go
+//  as far as level 1 existing/being "owned" so far.
 //
 
 import Foundation
@@ -12,23 +16,78 @@ enum Upgrade: String, CaseIterable {
     case electricShock
     case light
     case shield
+    case speed
+    case durability
+
+    var displayName: String {
+        switch self {
+        case .electricShock: return "Electric Shock"
+        case .light: return "Light"
+        case .shield: return "Shield"
+        case .speed: return "Speed"
+        case .durability: return "Durability"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .electricShock: return "⚡"
+        case .light: return "💡"
+        case .shield: return "🛡"
+        case .speed: return "🚀"
+        case .durability: return "🔩"
+        }
+    }
+
+    var maxLevel: Int { 3 }
+
+    private var baseCost: Int {
+        switch self {
+        case .electricShock: return 50
+        case .light: return 40
+        case .shield: return 60
+        case .speed: return 45
+        case .durability: return 45
+        }
+    }
+
+    /// Cost to purchase `level` (1-indexed) — e.g. the cost to go from
+    /// level 1 to level 2 is `cost(forLevel: 2)`.
+    func cost(forLevel level: Int) -> Int {
+        baseCost * level
+    }
 }
 
 class UpgradeStore {
-    private static let ownedKeyPrefix = "europaDiver.upgrade."
+    private static let levelKeyPrefix = "europaDiver.upgradeLevel."
 
-    func isOwned(_ upgrade: Upgrade) -> Bool {
-        UserDefaults.standard.bool(forKey: Self.ownedKeyPrefix + upgrade.rawValue)
+    func level(of upgrade: Upgrade) -> Int {
+        UserDefaults.standard.integer(forKey: Self.levelKeyPrefix + upgrade.rawValue)
     }
 
-    func markOwned(_ upgrade: Upgrade) {
-        UserDefaults.standard.set(true, forKey: Self.ownedKeyPrefix + upgrade.rawValue)
+    func isOwned(_ upgrade: Upgrade) -> Bool {
+        level(of: upgrade) > 0
+    }
+
+    /// Cost to buy the next level, or nil if already at max level.
+    func nextLevelCost(_ upgrade: Upgrade) -> Int? {
+        let next = level(of: upgrade) + 1
+        guard next <= upgrade.maxLevel else { return nil }
+        return upgrade.cost(forLevel: next)
+    }
+
+    @discardableResult
+    func levelUp(_ upgrade: Upgrade) -> Bool {
+        let next = level(of: upgrade) + 1
+        guard next <= upgrade.maxLevel else { return false }
+        UserDefaults.standard.set(next, forKey: Self.levelKeyPrefix + upgrade.rawValue)
+        return true
     }
 
     /// Erases every purchased upgrade. Used when starting a New Game.
     func resetAll() {
         for upgrade in Upgrade.allCases {
-            UserDefaults.standard.removeObject(forKey: Self.ownedKeyPrefix + upgrade.rawValue)
+            UserDefaults.standard.removeObject(forKey: Self.levelKeyPrefix + upgrade.rawValue)
         }
     }
 }

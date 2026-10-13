@@ -33,7 +33,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let cameraNode = SKCameraNode()
     private let joystick = Joystick()
     private var joystickTouch: UITouch?
-    private let moveSpeed: CGFloat = 160
+    private let baseMoveSpeed: CGFloat = 110
+    private let speedBonusPerLevel: CGFloat = 15
+    /// Base speed plus whatever the Speed upgrade currently adds.
+    private var moveSpeed: CGFloat {
+        baseMoveSpeed + CGFloat(upgradeStore.level(of: .speed)) * speedBonusPerLevel
+    }
 
     private var pressedButtonTouches: [UITouch: HUDButton] = [:]
 
@@ -68,7 +73,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var isShopOpen = false
 
     private let upgradeStore = UpgradeStore()
-    private let electricShockCost = 50
+    private let durabilityBonusPerLevel = 20
 
     private var touchingHostileFish: Set<Fish> = []
     private var nibbleTimer: TimeInterval = 0
@@ -108,10 +113,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let snakeDamageInterval: TimeInterval = 0.5
     private let snakeDamagePerTick = 15
 
+    private func currentMaxDurability() -> Int {
+        PlayerStats.baseDurability + upgradeStore.level(of: .durability) * durabilityBonusPerLevel
+    }
+
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.02, green: 0.08, blue: 0.18, alpha: 1.0)
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
+
+        playerStats.reset(maxDurability: currentMaxDurability())
 
         camera = cameraNode
         addChild(cameraNode)
@@ -448,7 +459,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func retryGame() {
-        playerStats.reset()
+        playerStats.reset(maxDurability: currentMaxDurability())
         rebuildLevel()
 
         isGameOver = false
@@ -465,7 +476,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func openShop() {
         gameOverOverlay.hide()
-        shopOverlay.updateElectricShock(owned: upgradeStore.isOwned(.electricShock), cost: electricShockCost)
+        shopOverlay.refresh(points: pointsManager.points, upgradeStore: upgradeStore)
         shopOverlay.show()
         isShopOpen = true
     }
@@ -476,13 +487,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         isShopOpen = false
     }
 
-    private func purchaseElectricShock() {
-        guard !upgradeStore.isOwned(.electricShock) else { return }
-        guard pointsManager.spendPoints(electricShockCost) else { return }
+    private func purchase(_ upgrade: Upgrade) {
+        guard let cost = upgradeStore.nextLevelCost(upgrade) else { return }
+        guard pointsManager.spendPoints(cost) else { return }
 
-        upgradeStore.markOwned(.electricShock)
+        upgradeStore.levelUp(upgrade)
         pointsHUD.update(points: pointsManager.points)
-        shopOverlay.updateElectricShock(owned: true, cost: electricShockCost)
+        shopOverlay.refresh(points: pointsManager.points, upgradeStore: upgradeStore)
         refreshAbilityButtonVisibility()
     }
 
@@ -668,8 +679,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 let pointInOverlay = shopOverlay.convert(touch.location(in: self), from: self)
                 if shopOverlay.hitTestClose(pointInOverlay) {
                     closeShop()
-                } else if shopOverlay.hitTestElectricShock(pointInOverlay) {
-                    purchaseElectricShock()
+                } else if let upgrade = shopOverlay.hitTestUpgrade(pointInOverlay) {
+                    purchase(upgrade)
                 }
             }
             return

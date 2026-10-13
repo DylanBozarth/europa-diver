@@ -2,7 +2,9 @@
 //  PlayerStats.swift
 //  europa-diver
 //
-//  Tracks the submarine's power, durability, and inventory.
+//  Tracks the submarine's power, durability, and inventory. Max durability
+//  is configurable (rather than a flat constant) so the Durability shop
+//  upgrade can raise it.
 //
 
 import Foundation
@@ -12,25 +14,29 @@ struct InventoryItem: Equatable {
 }
 
 class PlayerStats {
-    static let maxPower = 100
-    static let maxDurability = 100
+    static let basePower = 100
+    static let baseDurability = 100
 
+    private(set) var maxPower: Int
+    private(set) var maxDurability: Int
     private(set) var power: Int
     private(set) var durability: Int
     private(set) var inventory: [InventoryItem]
 
-    init(power: Int = PlayerStats.maxPower, durability: Int = PlayerStats.maxDurability, inventory: [InventoryItem] = []) {
-        self.power = power.clamped(to: 0...PlayerStats.maxPower)
-        self.durability = durability.clamped(to: 0...PlayerStats.maxDurability)
-        self.inventory = inventory
+    init(maxPower: Int = PlayerStats.basePower, maxDurability: Int = PlayerStats.baseDurability) {
+        self.maxPower = maxPower
+        self.maxDurability = maxDurability
+        self.power = maxPower
+        self.durability = maxDurability
+        self.inventory = []
     }
 
     func adjustPower(by amount: Int) {
-        power = (power + amount).clamped(to: 0...PlayerStats.maxPower)
+        power = (power + amount).clamped(to: 0...maxPower)
     }
 
     func adjustDurability(by amount: Int) {
-        durability = (durability + amount).clamped(to: 0...PlayerStats.maxDurability)
+        durability = (durability + amount).clamped(to: 0...maxDurability)
     }
 
     func addItem(_ item: InventoryItem) {
@@ -44,9 +50,12 @@ class PlayerStats {
         return true
     }
 
-    func reset() {
-        power = PlayerStats.maxPower
-        durability = PlayerStats.maxDurability
+    /// Restores power/durability to full and applies the current max
+    /// durability (e.g. after buying a Durability upgrade in the shop).
+    func reset(maxDurability: Int) {
+        self.maxDurability = maxDurability
+        power = maxPower
+        durability = maxDurability
         inventory.removeAll()
     }
 }

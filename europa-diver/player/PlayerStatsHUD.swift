@@ -11,7 +11,7 @@ import SpriteKit
 class MeterBar: SKNode {
     private let barWidth: CGFloat
     private let barHeight: CGFloat
-    private let maxValue: Int
+    private var maxValue: Int
     private let title: String
 
     private let track = SKShapeNode()
@@ -47,14 +47,17 @@ class MeterBar: SKNode {
         addChild(fill)
         addChild(label)
 
-        update(value: maxValue)
+        update(value: maxValue, maxValue: maxValue)
     }
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func update(value: Int) {
+    /// `maxValue` is re-applied every call rather than fixed at init, since
+    /// a Durability upgrade purchase can raise it mid-session.
+    func update(value: Int, maxValue: Int) {
+        self.maxValue = maxValue
         let clamped = min(max(value, 0), maxValue)
         let ratio = maxValue > 0 ? CGFloat(clamped) / CGFloat(maxValue) : 0
         let filledWidth = max(barWidth * ratio, 0.01)
@@ -78,8 +81,8 @@ class PlayerStatsHUD: SKNode {
     private let durabilityBar: MeterBar
 
     override init() {
-        powerBar = MeterBar(title: "Power", maxValue: PlayerStats.maxPower, color: .cyan)
-        durabilityBar = MeterBar(title: "Durability", maxValue: PlayerStats.maxDurability, color: .green)
+        powerBar = MeterBar(title: "Power", maxValue: PlayerStats.basePower, color: .cyan)
+        durabilityBar = MeterBar(title: "Durability", maxValue: PlayerStats.baseDurability, color: .green)
 
         super.init()
         zPosition = 100
@@ -96,7 +99,7 @@ class PlayerStatsHUD: SKNode {
     }
 
     func update(stats: PlayerStats) {
-        powerBar.update(value: stats.power)
-        durabilityBar.update(value: stats.durability)
+        powerBar.update(value: stats.power, maxValue: stats.maxPower)
+        durabilityBar.update(value: stats.durability, maxValue: stats.maxDurability)
     }
 }

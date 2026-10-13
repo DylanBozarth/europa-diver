@@ -20,7 +20,7 @@ import SpriteKit
 
 class Snake: SKNode {
 
-    private let swimSpeed: CGFloat = 80 // half of the submarine's 160 moveSpeed
+    private let swimSpeed: CGFloat = 80 // roughly half the submarine's base move speed
     private var lastDirection = CGVector(dx: 1, dy: 0)
 
     private let headSize = CGSize(width: 70, height: 60)

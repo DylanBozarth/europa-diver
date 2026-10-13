@@ -15,7 +15,7 @@ import SpriteKit
 
 class SmallSnake: SKSpriteNode {
 
-    // Faster than the submarine's 160 moveSpeed, so it can't be run down head-on.
+    // Faster than the submarine even at max Speed upgrade, so it can't be run down head-on.
     private let swimSpeed: CGFloat = 200
     private let fleeRadius: CGFloat = 220
     private let avoidRadius: CGFloat = 70
