@@ -16,6 +16,8 @@ class GameOverOverlay: SKNode {
     private let retryLabel = SKLabelNode(text: "Retry")
     private let shopButton = SKShapeNode(rectOf: CGSize(width: 140, height: 50), cornerRadius: 10)
     private let shopLabel = SKLabelNode(text: "Shop")
+    private let mainMenuButton = SKShapeNode(rectOf: CGSize(width: 140, height: 50), cornerRadius: 10)
+    private let mainMenuLabel = SKLabelNode(text: "Main Menu")
     private let factLabel = SKLabelNode()
 
     override init() {
@@ -64,6 +66,21 @@ class GameOverOverlay: SKNode {
         shopLabel.zPosition = 1
         shopButton.addChild(shopLabel)
 
+        mainMenuButton.name = "mainMenuButton"
+        mainMenuButton.fillColor = SKColor.white.withAlphaComponent(0.15)
+        mainMenuButton.strokeColor = .white
+        mainMenuButton.lineWidth = 2
+        mainMenuButton.position = CGPoint(x: 0, y: -130)
+        mainMenuButton.zPosition = 1
+
+        mainMenuLabel.fontName = "Helvetica-Bold"
+        mainMenuLabel.fontSize = 20
+        mainMenuLabel.fontColor = .white
+        mainMenuLabel.verticalAlignmentMode = .center
+        mainMenuLabel.horizontalAlignmentMode = .center
+        mainMenuLabel.zPosition = 1
+        mainMenuButton.addChild(mainMenuLabel)
+
         factLabel.fontName = "Helvetica"
         factLabel.fontSize = 13
         factLabel.fontColor = SKColor.white.withAlphaComponent(0.7)
@@ -72,13 +89,14 @@ class GameOverOverlay: SKNode {
         factLabel.preferredMaxLayoutWidth = 280
         factLabel.verticalAlignmentMode = .center
         factLabel.horizontalAlignmentMode = .center
-        factLabel.position = CGPoint(x: 0, y: -150)
+        factLabel.position = CGPoint(x: 0, y: -210)
         factLabel.zPosition = 1
 
         addChild(background)
         addChild(titleLabel)
         addChild(retryButton)
         addChild(shopButton)
+        addChild(mainMenuButton)
         addChild(factLabel)
     }
 
@@ -108,5 +126,10 @@ class GameOverOverlay: SKNode {
     /// `point` must be in this node's own coordinate space.
     func hitTestShop(_ point: CGPoint) -> Bool {
         shopButton.contains(point)
+    }
+
+    /// `point` must be in this node's own coordinate space.
+    func hitTestMainMenu(_ point: CGPoint) -> Bool {
+        mainMenuButton.contains(point)
     }
 }

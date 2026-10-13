@@ -19,6 +19,9 @@ class MainMenuScene: SKScene {
     private let shopButton = SKShapeNode(rectOf: CGSize(width: 220, height: 54), cornerRadius: 8)
     private let shopLabel = SKLabelNode()
 
+    private let newGameOverlay = NewGameOverlay()
+    private var isNewGameOverlayOpen = false
+
     private let shopOverlay = ShopOverlay()
     private var isShopOpen = false
 
@@ -32,6 +35,7 @@ class MainMenuScene: SKScene {
 
         setUpTitle()
         setUpButtons()
+        setUpNewGameOverlay()
         setUpShopOverlay()
         reposition()
     }
@@ -71,6 +75,10 @@ class MainMenuScene: SKScene {
         button.addChild(label)
     }
 
+    private func setUpNewGameOverlay() {
+        addChild(newGameOverlay)
+    }
+
     private func setUpShopOverlay() {
         addChild(shopOverlay)
     }
@@ -85,6 +93,9 @@ class MainMenuScene: SKScene {
         newGameButton.position = CGPoint(x: centerX, y: centerY + spacing)
         continueButton.position = CGPoint(x: centerX, y: centerY)
         shopButton.position = CGPoint(x: centerX, y: centerY - spacing)
+
+        newGameOverlay.position = CGPoint(x: centerX, y: centerY)
+        newGameOverlay.resize(to: size)
 
         shopOverlay.position = CGPoint(x: centerX, y: centerY)
         shopOverlay.resize(to: size)
@@ -114,18 +125,27 @@ class MainMenuScene: SKScene {
         shopOverlay.updateElectricShock(owned: true, cost: electricShockCost)
     }
 
-    private func startNewGame() {
+    private func openNewGameOverlay() {
+        newGameOverlay.show()
+        isNewGameOverlayOpen = true
+    }
+
+    private func confirmNewGame(skipTutorial: Bool) {
+        newGameOverlay.hide()
+        isNewGameOverlayOpen = false
+
         pointsManager.reset()
         upgradeStore.resetAll()
         surveyLog.resetAll()
-        startGame()
+        startGame(skipTutorial: skipTutorial)
     }
 
-    private func startGame() {
+    private func startGame(skipTutorial: Bool = false) {
         guard let view else { return }
 
         let gameScene = GameScene(size: size)
         gameScene.scaleMode = .resizeFill
+        gameScene.skipTutorial = skipTutorial
         view.presentScene(gameScene, transition: SKTransition.fade(withDuration: 0.5))
     }
 
@@ -143,8 +163,19 @@ class MainMenuScene: SKScene {
             return
         }
 
+        if isNewGameOverlayOpen {
+            let pointInOverlay = newGameOverlay.convert(point, from: self)
+            let result = newGameOverlay.handleTouch(pointInOverlay)
+            if result.startGame {
+                confirmNewGame(skipTutorial: result.skipTutorial)
+            } else if newGameOverlay.isHidden {
+                isNewGameOverlayOpen = false
+            }
+            return
+        }
+
         if newGameButton.contains(point) {
-            startNewGame()
+            openNewGameOverlay()
         } else if continueButton.contains(point) {
             startGame()
         } else if shopButton.contains(point) {

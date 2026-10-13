@@ -93,6 +93,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var levelEntrance: LevelEntrance?
     private var lastUpdateTime: TimeInterval = 0
     private var isFirstLevel = true
+    var skipTutorial = false
 
     private var touchingSnakes: Set<Snake> = []
     private var snakeDamageTimer: TimeInterval = 0
@@ -118,6 +119,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setUpShopOverlay()
         setUpMapLimits()
         setUpIceRoof()
+
+        if skipTutorial {
+            isFirstLevel = false
+            removeIceRoof()
+        }
+
         generateLevel()
         setUpLevelEntrance()
     }
@@ -406,6 +413,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         gameOverOverlay.hide()
     }
 
+    private func returnToMainMenu() {
+        guard let view else { return }
+
+        let menuScene = MainMenuScene(size: size)
+        menuScene.scaleMode = .resizeFill
+        view.presentScene(menuScene, transition: SKTransition.fade(withDuration: 0.5))
+    }
+
     private func openShop() {
         gameOverOverlay.hide()
         shopOverlay.updateElectricShock(owned: upgradeStore.isOwned(.electricShock), cost: electricShockCost)
@@ -625,6 +640,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                     retryGame()
                 } else if gameOverOverlay.hitTestShop(pointInOverlay) {
                     openShop()
+                } else if gameOverOverlay.hitTestMainMenu(pointInOverlay) {
+                    returnToMainMenu()
                 }
             }
             return
