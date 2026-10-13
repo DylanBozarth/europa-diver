@@ -56,7 +56,8 @@ struct LevelGenerator {
     let worldBottom: CGFloat
     let worldTop: CGFloat
 
-    var obstacleSpacing: ClosedRange<CGFloat> = 120...220
+    var obstacleSpacing: ClosedRange<CGFloat> = 350...550
+    var tunnelGapHeight: ClosedRange<CGFloat> = 70...110
     var fishSpacing: ClosedRange<CGFloat> = 150...300
     var ooiSpacing: ClosedRange<CGFloat> = 300...600
     var emptySlotSpacing: ClosedRange<CGFloat> = 500...900
@@ -95,10 +96,44 @@ struct LevelGenerator {
         CGFloat.random(in: (worldBottom + margin)...(worldTop - margin))
     }
 
+    /// Each obstacle column is a floor-to-ceiling rock wall with a single
+    /// gap, like a tunnel the player has to aim for, rather than isolated
+    /// floating rocks — the gap's height and position are randomized per
+    /// wall so later walls can't be passed on autopilot.
     private func generateObstacles() -> [LevelLayout.ObstacleSlot] {
-        positions(spacing: obstacleSpacing).map {
-            LevelLayout.ObstacleSlot(position: CGPoint(x: $0, y: randomY(margin: 40)))
+        positions(spacing: obstacleSpacing).flatMap(generateTunnelWall)
+    }
+
+    private func generateTunnelWall(centeredAt x: CGFloat) -> [LevelLayout.ObstacleSlot] {
+        let gapHeight = CGFloat.random(in: tunnelGapHeight)
+        let margin: CGFloat = 50
+        let gapCenterY = CGFloat.random(
+            in: (worldBottom + margin + gapHeight / 2)...(worldTop - margin - gapHeight / 2)
+        )
+
+        return stackedRocks(x: x, from: worldBottom, to: gapCenterY - gapHeight / 2)
+            + stackedRocks(x: x, from: gapCenterY + gapHeight / 2, to: worldTop)
+    }
+
+    /// Chains rocks from `startY` to `endY` close enough together that
+    /// consecutive ones always overlap (even with the horizontal jitter),
+    /// so the wall reads as one solid, slightly jagged rock face rather
+    /// than a perfect line of circles with gaps in it.
+    private func stackedRocks(x: CGFloat, from startY: CGFloat, to endY: CGFloat) -> [LevelLayout.ObstacleSlot] {
+        guard endY > startY else { return [] }
+
+        let radius = WorldConstants.obstacleRadius
+        let step = radius * 1.5
+        let jitter = radius * 0.3
+
+        var slots: [LevelLayout.ObstacleSlot] = []
+        var y = startY
+        while y < endY {
+            let jitteredX = x + CGFloat.random(in: -jitter...jitter)
+            slots.append(LevelLayout.ObstacleSlot(position: CGPoint(x: jitteredX, y: y)))
+            y += step
         }
+        return slots
     }
 
     private func generateFish() -> [LevelLayout.FishSlot] {

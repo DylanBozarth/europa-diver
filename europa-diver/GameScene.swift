@@ -86,6 +86,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var worldMinX: CGFloat = 0
     private var worldMaxX: CGFloat = 0
 
+    /// The sub enters from the ice above, so it spawns near the top of the
+    /// world rather than dead center.
+    private var spawnPosition: CGPoint { CGPoint(x: 0, y: worldTop - 50) }
+    /// Obstacles and hostile fish can't generate within this radius of the
+    /// spawn point, so the player never appears already stuck in a rock or
+    /// nose-to-nose with a hostile fish.
+    private let spawnSafeRadius: CGFloat = 120
+
     private var obstacles: [SKShapeNode] = []
     private var fish: [Fish] = []
     private var snakes: [Snake] = []
@@ -217,7 +225,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func setUpPlayer() {
-        player.position = CGPoint(x: 0, y: 0)
+        player.position = spawnPosition
         player.zPosition = 10
 
         let body = SKPhysicsBody(circleOfRadius: playerRadius)
@@ -231,7 +239,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         player.physicsBody = body
 
         addChild(player)
-        cameraNode.position = player.position
+        // The camera's y stays fixed at the world's vertical center (the
+        // full world height already fits on screen — only x scrolls), so
+        // it must not inherit the player's spawn y.
+        cameraNode.position = CGPoint(x: player.position.x, y: 0)
 
         addChild(scanProgressBar)
     }
@@ -320,6 +331,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         shopOverlay.resize(to: size)
     }
 
+    private func isNearSpawn(_ position: CGPoint) -> Bool {
+        hypot(position.x - spawnPosition.x, position.y - spawnPosition.y) < spawnSafeRadius
+    }
+
     private func generateLevel() {
         let layout: LevelLayout
         if isFirstLevel {
@@ -338,10 +353,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             ).generate()
         }
 
-        for slot in layout.obstacles {
+        for slot in layout.obstacles where !isNearSpawn(slot.position) {
             addObstacle(at: slot.position)
         }
-        for slot in layout.fishSlots {
+        for slot in layout.fishSlots where slot.kind != .hostile || !isNearSpawn(slot.position) {
             addFish(kind: slot.kind, appearanceIndex: slot.appearanceIndex, at: slot.position, roamHalfWidth: slot.roamHalfWidth)
         }
         for slot in layout.ooiSlots {
@@ -360,9 +375,36 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func setUpLevelEntrance() {
         let entrance = LevelEntrance()
-        entrance.position = CGPoint(x: 0, y: worldBottom + 20)
+        entrance.position = randomLevelEntrancePosition()
         addChild(entrance)
         levelEntrance = entrance
+    }
+
+    /// Picks a random spot for the next-level entrance, clear of the spawn
+    /// area and not buried inside a tunnel wall — otherwise it could land
+    /// somewhere unreachable.
+    private func randomLevelEntrancePosition() -> CGPoint {
+        let xMargin: CGFloat = 100
+        let yMargin: CGFloat = 40
+
+        for _ in 0..<50 {
+            let candidate = CGPoint(
+                x: CGFloat.random(in: (worldMinX + xMargin)...(worldMaxX - xMargin)),
+                y: CGFloat.random(in: (worldBottom + yMargin)...(worldTop - yMargin))
+            )
+            if !isNearSpawn(candidate) && !isInsideObstacle(candidate) {
+                return candidate
+            }
+        }
+
+        return CGPoint(x: 0, y: worldBottom + 20)
+    }
+
+    private func isInsideObstacle(_ position: CGPoint) -> Bool {
+        let entranceClearance: CGFloat = 15 + WorldConstants.obstacleRadius
+        return obstacles.contains {
+            hypot($0.position.x - position.x, $0.position.y - position.y) < entranceClearance
+        }
     }
 
     private func enterNextLevel() {
@@ -392,9 +434,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         generateLevel()
         setUpLevelEntrance()
 
-        player.position = .zero
+        player.position = spawnPosition
         player.physicsBody?.velocity = .zero
-        cameraNode.position = player.position
+        cameraNode.position = CGPoint(x: player.position.x, y: 0)
     }
 
     private func showGameOver() {
