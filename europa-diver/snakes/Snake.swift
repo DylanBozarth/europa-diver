@@ -34,7 +34,7 @@ class Snake: SKNode {
     private var bodySegments: [SKShapeNode] = []
     private let segmentCount = 8
     private let samplesPerSegment = 6
-
+ 
     /// Head's past world positions, newest first. Body segments each look
     /// back a fixed number of samples to find where they should sit — that
     /// lag is what produces the twisting, following motion through turns.

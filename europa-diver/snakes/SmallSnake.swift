@@ -13,7 +13,11 @@
 
 import SpriteKit
 
-class SmallSnake: SKSpriteNode {
+class SmallSnake: SKSpriteNode, Scannable {
+
+    /// Only one look exists so far, so every small snake is the same
+    /// species — unlike Fish, there's no appearance variant to fold in.
+    let speciesID = "smallSnake"
 
     // Faster than the submarine even at max Speed upgrade, so it can't be run down head-on.
     private let swimSpeed: CGFloat = 200

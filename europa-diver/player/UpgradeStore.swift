@@ -5,9 +5,9 @@
 //  Tracks each submarine upgrade's purchased level. Persists across
 //  retries and app relaunches (backed by UserDefaults), same as points.
 //
-//  Levels track what's been bought and what it costs; Speed and Durability
-//  are wired to actual gameplay effects (see GameScene), the rest only go
-//  as far as level 1 existing/being "owned" so far.
+//  Levels track what's been bought and what it costs; most upgrades are
+//  wired to actual gameplay effects (see GameScene) that scale with level —
+//  Light and Shield only go as far as level 1 existing/being "owned" so far.
 //
 
 import Foundation
@@ -19,6 +19,8 @@ enum Upgrade: String, CaseIterable {
     case speed
     case durability
     case torpedo
+    case waveGenerator
+    case autoRepair
 
     var displayName: String {
         switch self {
@@ -28,6 +30,8 @@ enum Upgrade: String, CaseIterable {
         case .speed: return "Speed"
         case .durability: return "Durability"
         case .torpedo: return "Torpedo"
+        case .waveGenerator: return "Wave Generator"
+        case .autoRepair: return "Auto Repair"
         }
     }
 
@@ -39,6 +43,8 @@ enum Upgrade: String, CaseIterable {
         case .speed: return "🚀"
         case .durability: return "🔩"
         case .torpedo: return "🎯"
+        case .waveGenerator: return "🌊"
+        case .autoRepair: return "🔧"
         }
     }
 
@@ -52,6 +58,8 @@ enum Upgrade: String, CaseIterable {
         case .speed: return 45
         case .durability: return 45
         case .torpedo: return 55
+        case .waveGenerator: return 50
+        case .autoRepair: return 55
         }
     }
 

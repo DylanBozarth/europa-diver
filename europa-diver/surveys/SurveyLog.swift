@@ -2,10 +2,11 @@
 //  SurveyLog.swift
 //  europa-diver
 //
-//  Tracks which fish species the player has scanned, keyed by Fish.speciesID
-//  (kind + appearance), so e.g. the large red fish and the small red fish
-//  count as different species. Scanning one that's already logged is a
-//  no-op. Persists via UserDefaults.
+//  Tracks which species the player has scanned, keyed by Scannable.speciesID
+//  (kind + appearance for Fish, so e.g. the large red fish and the small red
+//  fish count as different species; a fixed string for single-look species
+//  like SmallSnake). Scanning one that's already logged is a no-op.
+//  Persists via UserDefaults.
 //
 
 import Foundation
@@ -29,5 +30,6 @@ class SurveyLog {
                 UserDefaults.standard.removeObject(forKey: Self.keyPrefix + "\(kind.rawValue)-\(index)")
             }
         }
+        UserDefaults.standard.removeObject(forKey: Self.keyPrefix + "smallSnake")
     }
 }

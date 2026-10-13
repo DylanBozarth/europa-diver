@@ -58,10 +58,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let torpedoSpeed: CGFloat = 70
     private let torpedoFrightenDuration: TimeInterval = 30
 
+    private let waveGeneratorRegenPerLevel = 1
+    private var waveGeneratorTimer: TimeInterval = 0
+    private let waveGeneratorInterval: TimeInterval = 1.0
+
+    private let autoRepairButton = HUDButton(icon: "🔧")
+    private let autoRepairPowerCost = 15
+    private let autoRepairDurabilityPerLevel = 10
+
     private let surveyLog = SurveyLog()
     private let scanRadius: CGFloat = 100
     private let scanProgressBar = ScanProgressBar()
-    private var scanTarget: Fish?
+    private var scanTarget: (any Scannable)?
     private var scanElapsed: TimeInterval = 0
     private let scanDuration: TimeInterval = 3.0
     private let scanRewardPoints = 300
@@ -85,6 +93,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var nibbleTimer: TimeInterval = 0
     private let nibbleInterval: TimeInterval = 0.5
     private let nibbleDamagePerFish = 5
+    private let hostileFishContactRange: CGFloat = 50
 
     private var lastObstacleHitTime: TimeInterval = 0
     private let obstacleHitCooldown: TimeInterval = 0.5
@@ -118,6 +127,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var snakeDamageTimer: TimeInterval = 0
     private let snakeDamageInterval: TimeInterval = 0.5
     private let snakeDamagePerTick = 15
+    private let snakeContactRange: CGFloat = 70
 
     private func currentMaxDurability() -> Int {
         PlayerStats.baseDurability + upgradeStore.level(of: .durability) * durabilityBonusPerLevel
@@ -279,6 +289,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         cameraNode.addChild(shieldButton)
         cameraNode.addChild(shockButton)
         cameraNode.addChild(torpedoButton)
+        cameraNode.addChild(autoRepairButton)
         repositionHUDButtons()
         refreshAbilityButtonVisibility()
     }
@@ -297,11 +308,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         lightButton.position = CGPoint(x: x, y: bottomY + spacing)
         shieldButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
         shockButton.position = CGPoint(x: x, y: bottomY + spacing * 3)
+        autoRepairButton.position = CGPoint(x: x, y: bottomY + spacing * 4)
     }
 
     private func refreshAbilityButtonVisibility() {
         // The scan button is a base ability and is always available; the rest
         // only show once their corresponding upgrade has been purchased.
+        // Wave Generator has no button at all — it's a passive effect.
+        autoRepairButton.isHidden = !upgradeStore.isOwned(.autoRepair)
         shockButton.isHidden = !upgradeStore.isOwned(.electricShock)
         lightButton.isHidden = !upgradeStore.isOwned(.light)
         shieldButton.isHidden = !upgradeStore.isOwned(.shield)
@@ -538,10 +552,37 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         Torpedo.fire(from: spawnPosition, direction: facing, speed: torpedoSpeed, in: self)
     }
 
+    private func triggerAutoRepair() {
+        guard upgradeStore.isOwned(.autoRepair) else { return }
+        guard playerStats.durability < playerStats.maxDurability else { return }
+        guard playerStats.power >= autoRepairPowerCost else { return }
+
+        playerStats.adjustPower(by: -autoRepairPowerCost)
+        playerStats.adjustDurability(by: upgradeStore.level(of: .autoRepair) * autoRepairDurabilityPerLevel)
+    }
+
+    /// Passive regen: only while the player isn't giving any movement input,
+    /// restores power once per second, scaled by the upgrade's level.
+    private func updateWaveGenerator(deltaTime: TimeInterval) {
+        let level = upgradeStore.level(of: .waveGenerator)
+        let input = joystick.vector
+        guard level > 0, input.dx == 0, input.dy == 0 else {
+            waveGeneratorTimer = 0
+            return
+        }
+
+        waveGeneratorTimer += deltaTime
+        guard waveGeneratorTimer >= waveGeneratorInterval else { return }
+        waveGeneratorTimer -= waveGeneratorInterval
+
+        playerStats.adjustPower(by: level * waveGeneratorRegenPerLevel)
+    }
+
     private func startScan() {
         guard scanTarget == nil else { return }
 
-        let target = fish.first { candidate in
+        let candidates: [any Scannable] = fish + smallSnakes
+        let target = candidates.first { candidate in
             guard !surveyLog.hasScanned(candidate.speciesID) else { return false }
             let dx = candidate.position.x - player.position.x
             let dy = candidate.position.y - player.position.y
@@ -557,8 +598,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func updateScan(deltaTime: TimeInterval) {
         guard let target = scanTarget else { return }
-
-        guard fish.contains(target) else {
+        guard isScanTargetStillPresent(target) else {
             cancelScan()
             return
         }
@@ -579,7 +619,17 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
-    private func completeScan(for target: Fish) {
+    private func isScanTargetStillPresent(_ target: any Scannable) -> Bool {
+        if let fishTarget = target as? Fish {
+            return fish.contains(fishTarget)
+        }
+        if let smallSnakeTarget = target as? SmallSnake {
+            return smallSnakes.contains(smallSnakeTarget)
+        }
+        return false
+    }
+
+    private func completeScan(for target: any Scannable) {
         surveyLog.markScanned(target.speciesID)
         pointsManager.addPoints(scanRewardPoints)
 
@@ -736,6 +786,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
+        if let touch = touches.first(where: { hitTest(autoRepairButton, touch: $0) }) {
+            autoRepairButton.setPressed(true)
+            pressedButtonTouches[touch] = autoRepairButton
+            triggerAutoRepair()
+            return
+        }
+
         if let touch = touches.first(where: { hitTest(scannerButton, touch: $0) }) {
             scannerButton.setPressed(true)
             pressedButtonTouches[touch] = scannerButton
@@ -845,12 +902,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         updateHostileFishNibble(deltaTime: deltaTime)
         updateSnakeDamage(deltaTime: deltaTime)
         updateScan(deltaTime: deltaTime)
+        updateWaveGenerator(deltaTime: deltaTime)
 
         statsHUD.update(stats: playerStats)
         pointsHUD.update(points: pointsManager.points)
     }
 
     private func updateHostileFishNibble(deltaTime: TimeInterval) {
+        pruneStaleContacts(&touchingHostileFish, maxDistance: hostileFishContactRange) { $0.position }
         guard !touchingHostileFish.isEmpty else { return }
 
         nibbleTimer += deltaTime
@@ -861,6 +920,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func updateSnakeDamage(deltaTime: TimeInterval) {
+        pruneStaleContacts(&touchingSnakes, maxDistance: snakeContactRange) { $0.position }
         guard !touchingSnakes.isEmpty else { return }
 
         snakeDamageTimer += deltaTime
@@ -868,6 +928,30 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         snakeDamageTimer = 0
 
         applyDurabilityDamage(snakeDamagePerTick * touchingSnakes.count)
+    }
+
+    /// Physics contact-end events can occasionally be missed — particularly
+    /// for Snake, whose "awkward" movement deliberately relies on abrupt
+    /// collision-driven velocity changes against obstacles/walls — leaving
+    /// a touch set holding something that's no longer actually nearby. That
+    /// shows up as phantom periodic damage from what looks like an empty
+    /// spot, since the real (visible) culprit has already moved away. Contact
+    /// bookkeeping still drives insertion; this just stops trusting it to
+    /// also drive removal, so a stale entry can't linger indefinitely.
+    private func pruneStaleContacts<T: Hashable>(
+        _ contacts: inout Set<T>,
+        maxDistance: CGFloat,
+        position: (T) -> CGPoint
+    ) {
+        guard !contacts.isEmpty else { return }
+
+        let maxDistanceSquared = maxDistance * maxDistance
+        contacts = contacts.filter { candidate in
+            let point = position(candidate)
+            let dx = point.x - player.position.x
+            let dy = point.y - player.position.y
+            return dx * dx + dy * dy <= maxDistanceSquared
+        }
     }
 
     private func applyDurabilityDamage(_ amount: Int) {

@@ -15,7 +15,9 @@ import SpriteKit
 private class ShopUpgradeRow: SKNode {
     let upgrade: Upgrade
 
-    private let card = SKShapeNode(rectOf: CGSize(width: 260, height: 60), cornerRadius: 10)
+    static let size = CGSize(width: 220, height: 56)
+
+    private let card = SKShapeNode(rectOf: ShopUpgradeRow.size, cornerRadius: 10)
     private let nameLabel = SKLabelNode()
     private let levelLabel = SKLabelNode()
     private let costLabel = SKLabelNode()
@@ -30,30 +32,30 @@ private class ShopUpgradeRow: SKNode {
         addChild(card)
 
         nameLabel.fontName = "Helvetica-Bold"
-        nameLabel.fontSize = 17
+        nameLabel.fontSize = 16
         nameLabel.fontColor = .white
         nameLabel.horizontalAlignmentMode = .left
         nameLabel.verticalAlignmentMode = .center
         nameLabel.text = "\(upgrade.icon) \(upgrade.displayName)"
-        nameLabel.position = CGPoint(x: -120, y: 9)
+        nameLabel.position = CGPoint(x: -100, y: 8)
         nameLabel.zPosition = 1
         addChild(nameLabel)
 
         levelLabel.fontName = "Helvetica"
-        levelLabel.fontSize = 13
+        levelLabel.fontSize = 12
         levelLabel.fontColor = SKColor.white.withAlphaComponent(0.7)
         levelLabel.horizontalAlignmentMode = .left
         levelLabel.verticalAlignmentMode = .center
-        levelLabel.position = CGPoint(x: -120, y: -12)
+        levelLabel.position = CGPoint(x: -100, y: -11)
         levelLabel.zPosition = 1
         addChild(levelLabel)
 
         costLabel.fontName = "Helvetica-Bold"
-        costLabel.fontSize = 16
+        costLabel.fontSize = 15
         costLabel.fontColor = .white
         costLabel.horizontalAlignmentMode = .right
         costLabel.verticalAlignmentMode = .center
-        costLabel.position = CGPoint(x: 115, y: 0)
+        costLabel.position = CGPoint(x: 95, y: 0)
         costLabel.zPosition = 1
         addChild(costLabel)
     }
@@ -93,9 +95,11 @@ class ShopOverlay: SKNode {
     private let closeLabel = SKLabelNode(text: "Close")
 
     private var rows: [ShopUpgradeRow] = []
-    /// Two upgrades per row — screens here are wide (landscape) and short,
-    /// so a single column of 5+ rows would run off the top/bottom.
-    private let columns = 2
+    /// Three upgrades per row — screens here are wide (landscape) and
+    /// short, so keeping rows to a minimum leaves enough vertical room for
+    /// real padding between them instead of them running into each other.
+    private let columns = 3
+    private let rowPadding: CGFloat = 18
 
     override init() {
         super.init()
@@ -164,28 +168,42 @@ class ShopOverlay: SKNode {
 
     /// Spreads every element out to use the full screen (title near the
     /// top, close button near the bottom, upgrade grid filling what's left
-    /// between them) instead of a small cluster in the middle.
+    /// between them) instead of a small cluster in the middle. Rows use a
+    /// fixed, comfortably-padded spacing and are centered as a block in
+    /// whatever vertical room is left — they only shrink (uniformly, via
+    /// setScale) on a screen too short to fit that spacing without the
+    /// fallback actually overlapping.
     private func layout(for size: CGSize) {
         let halfHeight = size.height / 2
 
-        titleLabel.position = CGPoint(x: 0, y: halfHeight - 50)
-        pointsLabel.position = CGPoint(x: 0, y: titleLabel.position.y - 45)
+        titleLabel.position = CGPoint(x: 0, y: halfHeight - 45)
+        pointsLabel.position = CGPoint(x: 0, y: titleLabel.position.y - 38)
 
-        let closeY = -halfHeight + 55
+        let closeY = -halfHeight + 48
         closeButton.position = CGPoint(x: 0, y: closeY)
 
+        let gridTop = pointsLabel.position.y - 45
+        let gridBottom = closeY + 55
+        let availableHeight = gridTop - gridBottom
+
         let rowCount = Int(ceil(Double(rows.count) / Double(columns)))
-        let gridTop = pointsLabel.position.y - 55
-        let gridBottom = closeY + 70
-        let rowSpacing = rowCount > 1 ? (gridTop - gridBottom) / CGFloat(rowCount - 1) : 0
-        let columnSpacing = min(max(size.width * 0.32, 160), 280)
+        let gapCount = CGFloat(max(rowCount - 1, 0))
+        let idealRowSpacing = ShopUpgradeRow.size.height + rowPadding
+        let neededHeight = idealRowSpacing * gapCount
+        let scale = neededHeight > 0 ? min(1, availableHeight / neededHeight) : 1
+        let rowSpacing = idealRowSpacing * scale
+
+        let gridHeight = rowSpacing * gapCount
+        let firstRowY = (gridTop + gridBottom) / 2 + gridHeight / 2
+        let columnSpacing = min(max(size.width * 0.24, 200), 240)
 
         for (index, row) in rows.enumerated() {
             let column = index % columns
             let gridRow = index / columns
             let x = (CGFloat(column) - CGFloat(columns - 1) / 2) * columnSpacing
-            let y = rowCount > 1 ? gridTop - CGFloat(gridRow) * rowSpacing : (gridTop + gridBottom) / 2
+            let y = firstRowY - CGFloat(gridRow) * rowSpacing
             row.position = CGPoint(x: x, y: y)
+            row.setScale(scale)
         }
     }
 

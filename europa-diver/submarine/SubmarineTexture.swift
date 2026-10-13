@@ -11,12 +11,6 @@ import SpriteKit
 
 enum SubmarineTexture {
     static func make(size: CGSize = CGSize(width: 200, height: 160)) -> SKTexture {
-        let renderer = ImageRenderer(content: YellowSubmarineIcon().frame(width: size.width, height: size.height))
-        renderer.scale = 3
-
-        guard let uiImage = renderer.uiImage else {
-            return SKTexture()
-        }
-        return SKTexture(image: uiImage)
+        SwiftUIIconRenderer.render(YellowSubmarineIcon(), size: size, fallbackColor: .yellow)
     }
 }

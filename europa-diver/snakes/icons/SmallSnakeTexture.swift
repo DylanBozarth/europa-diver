@@ -10,12 +10,6 @@ import SpriteKit
 
 enum SmallSnakeTexture {
     static func make(size: CGSize) -> SKTexture {
-        let renderer = ImageRenderer(content: SmallSnakeIcon().frame(width: size.width, height: size.height))
-        renderer.scale = 3
-
-        guard let uiImage = renderer.uiImage else {
-            return SKTexture()
-        }
-        return SKTexture(image: uiImage)
+        SwiftUIIconRenderer.render(SmallSnakeIcon(), size: size, fallbackColor: .green)
     }
 }

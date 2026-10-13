@@ -11,7 +11,7 @@ enum FishKind: String, CaseIterable {
     case hostile
 }
 
-class Fish: SKSpriteNode {
+class Fish: SKSpriteNode, Scannable {
 
     let kind: FishKind
     let appearanceIndex: Int
