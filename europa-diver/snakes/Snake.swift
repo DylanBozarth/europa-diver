@@ -3,12 +3,14 @@
 //  europa-diver
 //
 //  A large, hostile enemy that cannot be damaged by the shock ability or
-//  anything else — the only valid response to one is avoidance. Aggressively
-//  chases the submarine (recomputed every frame), but stays big, slow (half
-//  the submarine's speed), and awkward: it has no obstacle-avoidance smarts
-//  at all, so it relies on raw physics collision to "deal with" obstacles,
-//  which is what gives it its clumsy, get-stuck-in-corners movement even
-//  while it's bearing straight down on the player.
+//  anything else — the only valid response to one is avoidance, aside from
+//  a torpedo hit, which scares it into fleeing for a while (see frighten(duration:)).
+//  Aggressively chases the submarine (recomputed every frame), but stays
+//  big, slow (half the submarine's speed), and awkward: it has no
+//  obstacle-avoidance smarts at all, so it relies on raw physics collision
+//  to "deal with" obstacles, which is what gives it its clumsy,
+//  get-stuck-in-corners movement even while it's bearing straight down on
+//  the player.
 //
 //  Built from a head plus several trailing body segments that follow the
 //  head's past path (classic "Snake" game movement), rather than one rigid
@@ -22,6 +24,9 @@ class Snake: SKNode {
 
     private let swimSpeed: CGFloat = 80 // roughly half the submarine's base move speed
     private var lastDirection = CGVector(dx: 1, dy: 0)
+    /// Set by a torpedo hit (see GameScene.handleTorpedoContact) — while
+    /// positive, the snake flees the player instead of chasing.
+    private var frightenedTimeRemaining: TimeInterval = 0
 
     private let headSize = CGSize(width: 70, height: 60)
     private let head: SKSpriteNode
@@ -84,12 +89,24 @@ class Snake: SKNode {
         physicsBody = body
     }
 
+    /// Scares the snake into fleeing the player for `duration` seconds.
+    func frighten(duration: TimeInterval) {
+        frightenedTimeRemaining = duration
+    }
+
     func update(deltaTime: TimeInterval, playerPosition: CGPoint) {
+        if frightenedTimeRemaining > 0 {
+            frightenedTimeRemaining -= deltaTime
+        }
+
         let dx = playerPosition.x - position.x
         let dy = playerPosition.y - position.y
         let distance = sqrt(dx * dx + dy * dy)
 
-        let direction = distance > 0.001 ? CGVector(dx: dx / distance, dy: dy / distance) : lastDirection
+        let towardPlayer = distance > 0.001 ? CGVector(dx: dx / distance, dy: dy / distance) : lastDirection
+        let direction = frightenedTimeRemaining > 0
+            ? CGVector(dx: -towardPlayer.dx, dy: -towardPlayer.dy)
+            : towardPlayer
         lastDirection = direction
 
         physicsBody?.velocity = CGVector(dx: direction.dx * swimSpeed, dy: direction.dy * swimSpeed)

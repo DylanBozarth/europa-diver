@@ -18,6 +18,7 @@ enum Upgrade: String, CaseIterable {
     case shield
     case speed
     case durability
+    case torpedo
 
     var displayName: String {
         switch self {
@@ -26,6 +27,7 @@ enum Upgrade: String, CaseIterable {
         case .shield: return "Shield"
         case .speed: return "Speed"
         case .durability: return "Durability"
+        case .torpedo: return "Torpedo"
         }
     }
 
@@ -36,6 +38,7 @@ enum Upgrade: String, CaseIterable {
         case .shield: return "🛡"
         case .speed: return "🚀"
         case .durability: return "🔩"
+        case .torpedo: return "🎯"
         }
     }
 
@@ -48,6 +51,7 @@ enum Upgrade: String, CaseIterable {
         case .shield: return 60
         case .speed: return 45
         case .durability: return 45
+        case .torpedo: return 55
         }
     }
 

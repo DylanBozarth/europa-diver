@@ -19,6 +19,7 @@ struct PhysicsCategory {
     static let levelEntrance: UInt32 = 0x1 << 7
     static let snake: UInt32 = 0x1 << 8
     static let smallSnake: UInt32 = 0x1 << 9
+    static let torpedo: UInt32 = 0x1 << 10
 }
 
 enum WorldConstants {
@@ -51,6 +52,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let shockButton = HUDButton(icon: "⚡")
     private let shockRadius: CGFloat = 100
     private let shockPowerCost = 20
+
+    private let torpedoButton = HUDButton(icon: "🎯")
+    private let torpedoPowerCost = 10
+    private let torpedoSpeed: CGFloat = 70
+    private let torpedoFrightenDuration: TimeInterval = 30
 
     private let surveyLog = SurveyLog()
     private let scanRadius: CGFloat = 100
@@ -272,6 +278,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         cameraNode.addChild(lightButton)
         cameraNode.addChild(shieldButton)
         cameraNode.addChild(shockButton)
+        cameraNode.addChild(torpedoButton)
         repositionHUDButtons()
         refreshAbilityButtonVisibility()
     }
@@ -283,7 +290,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         // Scan is the one button always available, so it anchors the bottom-left
         // corner; the upgrade-gated buttons (often hidden) stack above it.
+        // Torpedo sits next to scan instead of stacking, since they're both
+        // "fire and forget" actions rather than toggled defenses.
         scannerButton.position = CGPoint(x: x, y: bottomY)
+        torpedoButton.position = CGPoint(x: x + spacing, y: bottomY)
         lightButton.position = CGPoint(x: x, y: bottomY + spacing)
         shieldButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
         shockButton.position = CGPoint(x: x, y: bottomY + spacing * 3)
@@ -295,6 +305,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         shockButton.isHidden = !upgradeStore.isOwned(.electricShock)
         lightButton.isHidden = !upgradeStore.isOwned(.light)
         shieldButton.isHidden = !upgradeStore.isOwned(.shield)
+        torpedoButton.isHidden = !upgradeStore.isOwned(.torpedo)
     }
 
     private func setUpStatsHUD() {
@@ -516,6 +527,17 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         fish.removeAll { nearbyFish.contains($0) }
     }
 
+    private func triggerTorpedo() {
+        guard upgradeStore.isOwned(.torpedo) else { return }
+        guard playerStats.power >= torpedoPowerCost else { return }
+
+        playerStats.adjustPower(by: -torpedoPowerCost)
+
+        let facing: CGFloat = player.xScale < 0 ? -1 : 1
+        let spawnPosition = CGPoint(x: player.position.x + facing * (playerRadius + 10), y: player.position.y)
+        Torpedo.fire(from: spawnPosition, direction: facing, speed: torpedoSpeed, in: self)
+    }
+
     private func startScan() {
         guard scanTarget == nil else { return }
 
@@ -707,6 +729,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
+        if let touch = touches.first(where: { hitTest(torpedoButton, touch: $0) }) {
+            torpedoButton.setPressed(true)
+            pressedButtonTouches[touch] = torpedoButton
+            triggerTorpedo()
+            return
+        }
+
         if let touch = touches.first(where: { hitTest(scannerButton, touch: $0) }) {
             scannerButton.setPressed(true)
             pressedButtonTouches[touch] = scannerButton
@@ -876,6 +905,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             touchingSnakes.insert(snake)
         }
 
+        if categories.contains(PhysicsCategory.torpedo) {
+            handleTorpedoContact(contact)
+        }
+
         if categories.contains(PhysicsCategory.ooi) {
             let ooi = [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? OOI }.first
             if ooi != nil {
@@ -905,10 +938,46 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? Snake }.first
     }
 
+    private func smallSnakeNode(in contact: SKPhysicsContact) -> SmallSnake? {
+        [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? SmallSnake }.first
+    }
+
+    private func fishNode(in contact: SKPhysicsContact) -> Fish? {
+        [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? Fish }.first
+    }
+
     private func hostileFishNode(in contact: SKPhysicsContact) -> Fish? {
-        [contact.bodyA.node, contact.bodyB.node]
-            .compactMap { $0 as? Fish }
-            .first { $0.kind == .hostile }
+        fishNode(in: contact).flatMap { $0.kind == .hostile ? $0 : nil }
+    }
+
+    private func torpedoNode(in contact: SKPhysicsContact) -> SKNode? {
+        if contact.bodyA.categoryBitMask == PhysicsCategory.torpedo { return contact.bodyA.node }
+        if contact.bodyB.categoryBitMask == PhysicsCategory.torpedo { return contact.bodyB.node }
+        return nil
+    }
+
+    /// A torpedo hit kills small and hostile fish outright (large fish are
+    /// spared), scares both kinds of snake into fleeing for a while, and is
+    /// consumed on any of those hits.
+    private func handleTorpedoContact(_ contact: SKPhysicsContact) {
+        guard let torpedo = torpedoNode(in: contact) else { return }
+
+        if let target = fishNode(in: contact), target.kind != .large {
+            target.removeFromParent()
+            fish.removeAll { $0 === target }
+            touchingHostileFish.remove(target)
+            torpedo.removeFromParent()
+        }
+
+        if let snake = snakeNode(in: contact) {
+            snake.frighten(duration: torpedoFrightenDuration)
+            torpedo.removeFromParent()
+        }
+
+        if let smallSnake = smallSnakeNode(in: contact) {
+            smallSnake.frighten(duration: torpedoFrightenDuration)
+            torpedo.removeFromParent()
+        }
     }
 
     private func flashPlayerRed() {

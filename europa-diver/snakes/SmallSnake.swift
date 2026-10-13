@@ -24,6 +24,9 @@ class SmallSnake: SKSpriteNode {
 
     private var roamDirection = CGVector(dx: 0, dy: 0)
     private var timeUntilNextTurn: TimeInterval = 0
+    /// Set by a torpedo hit (see GameScene.handleTorpedoContact) — while
+    /// positive, it flees regardless of the normal on-screen/distance gate.
+    private var frightenedTimeRemaining: TimeInterval = 0
 
     init(size: CGSize = CGSize(width: 60, height: 18)) {
         bodyRadius = max(size.width, size.height) / 2
@@ -57,6 +60,12 @@ class SmallSnake: SKSpriteNode {
         timeUntilNextTurn = TimeInterval.random(in: 2.0...4.0)
     }
 
+    /// Scares the snake into fleeing for `duration` seconds, regardless of
+    /// whether it's currently on-screen or within its normal flee radius.
+    func frighten(duration: TimeInterval) {
+        frightenedTimeRemaining = duration
+    }
+
     func update(
         deltaTime: TimeInterval,
         playerPosition: CGPoint,
@@ -71,6 +80,9 @@ class SmallSnake: SKSpriteNode {
         if timeUntilNextTurn <= 0 {
             pickNewDirection()
         }
+        if frightenedTimeRemaining > 0 {
+            frightenedTimeRemaining -= deltaTime
+        }
 
         var primaryDirection = roamDirection
 
@@ -78,7 +90,8 @@ class SmallSnake: SKSpriteNode {
         let dy = position.y - playerPosition.y
         let distanceToPlayer = sqrt(dx * dx + dy * dy)
 
-        if isOnScreen, distanceToPlayer < fleeRadius, distanceToPlayer > 0.001 {
+        let shouldFlee = frightenedTimeRemaining > 0 || (isOnScreen && distanceToPlayer < fleeRadius)
+        if shouldFlee, distanceToPlayer > 0.001 {
             // Flee directly away from the player instead of roaming.
             primaryDirection = CGVector(dx: dx / distanceToPlayer, dy: dy / distanceToPlayer)
         }
