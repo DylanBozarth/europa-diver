@@ -22,14 +22,30 @@ class SurveyLog {
         UserDefaults.standard.set(true, forKey: Self.keyPrefix + speciesID)
     }
 
-    /// Erases every scanned species. Used when starting a New Game.
-    func resetAll() {
+    /// Every species ID that can ever be scanned: each fish kind/appearance
+    /// combination plus the single-look small snake.
+    static var allSpeciesIDs: [String] {
+        var ids: [String] = []
         for kind in FishKind.allCases {
             let variantCount = kind == .hostile ? FishTexture.hostileVariantCount : FishPalette.all.count
             for index in 0..<variantCount {
-                UserDefaults.standard.removeObject(forKey: Self.keyPrefix + "\(kind.rawValue)-\(index)")
+                ids.append("\(kind.rawValue)-\(index)")
             }
         }
-        UserDefaults.standard.removeObject(forKey: Self.keyPrefix + "smallSnake")
+        ids.append("smallSnake")
+        return ids
+    }
+
+    /// IDs of everything scanned so far. The level generator uses this to
+    /// bias each level toward species the player hasn't found yet.
+    func scannedSpeciesIDs() -> Set<String> {
+        Set(Self.allSpeciesIDs.filter(hasScanned))
+    }
+
+    /// Erases every scanned species. Used when starting a New Game.
+    func resetAll() {
+        for id in Self.allSpeciesIDs {
+            UserDefaults.standard.removeObject(forKey: Self.keyPrefix + id)
+        }
     }
 }

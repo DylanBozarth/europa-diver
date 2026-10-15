@@ -123,7 +123,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var smallSnakes: [SmallSnake] = []
     private var levelEntrance: LevelEntrance?
     private var lastUpdateTime: TimeInterval = 0
-    private var isFirstLevel = true
+    /// 1-based level number. Depth 1 is the tutorial; every level entrance
+    /// taken adds one, and DepthProfile turns the number into how hostile
+    /// (and how rewarding) the generated level is. Retrying after a game
+    /// over rebuilds the same depth rather than sending the player back up.
+    private var depth = 1
+    private var isFirstLevel: Bool { depth == 1 }
+    private var depthProfile: DepthProfile { DepthProfile(depth: depth) }
     var skipTutorial = false
     var showAdvisorOnStart = false
 
@@ -161,7 +167,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setUpIceRoof()
 
         if skipTutorial {
-            isFirstLevel = false
+            depth = 2
             removeIceRoof()
         }
 
@@ -345,7 +351,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private func setUpPointsHUD() {
         cameraNode.addChild(pointsHUD)
         repositionPointsHUD()
-        pointsHUD.update(points: pointsManager.points)
+        pointsHUD.update(points: pointsManager.points, depth: depth)
     }
 
     private func repositionPointsHUD() {
@@ -388,23 +394,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         hypot(position.x - spawnPosition.x, position.y - spawnPosition.y) < spawnSafeRadius
     }
 
+    /// Builds the level for the current `depth`. The generator is told what
+    /// the player has already scanned so it can fill the level with species
+    /// they still need — the deeper the level, the more of those there are.
     private func generateLevel() {
-        let layout: LevelLayout
-        if isFirstLevel {
-            layout = TutorialLevelGenerator(
-                worldMinX: worldMinX,
-                worldMaxX: worldMaxX,
-                worldBottom: worldBottom,
-                worldTop: worldTop
-            ).generate()
-        } else {
-            layout = LevelGenerator(
-                worldMinX: worldMinX,
-                worldMaxX: worldMaxX,
-                worldBottom: worldBottom,
-                worldTop: worldTop
-            ).generate()
-        }
+        let layout = LevelGenerator(
+            worldMinX: worldMinX,
+            worldMaxX: worldMaxX,
+            worldBottom: worldBottom,
+            worldTop: worldTop,
+            profile: depthProfile,
+            discoveredSpeciesIDs: surveyLog.scannedSpeciesIDs()
+        ).generate()
 
         for slot in layout.obstacles where !isNearSpawn(slot.position) {
             addObstacle(at: slot.position)
@@ -418,7 +419,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         for slot in layout.emptySlots {
             addEmptySlot(at: slot.position)
         }
-        for slot in layout.snakeSlots {
+        for slot in layout.snakeSlots where !isNearSpawn(slot.position) {
             addSnake(at: slot.position)
         }
         for slot in layout.smallSnakeSlots {
@@ -465,9 +466,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         isLoadingLevel = true
 
         if isFirstLevel {
-            isFirstLevel = false
             removeIceRoof()
         }
+        depth += 1
 
         player.physicsBody?.velocity = .zero
         loadingOverlay.show()
@@ -551,7 +552,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         guard pointsManager.spendPoints(cost) else { return }
 
         upgradeStore.levelUp(upgrade)
-        pointsHUD.update(points: pointsManager.points)
+        pointsHUD.update(points: pointsManager.points, depth: depth)
         shopOverlay.refresh(points: pointsManager.points, upgradeStore: upgradeStore)
         refreshAbilityButtonVisibility()
     }
@@ -665,7 +666,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func completeScan(for target: any Scannable) {
         surveyLog.markScanned(target.speciesID)
-        pointsManager.addPoints(scanRewardPoints)
+        pointsManager.addPoints(scanRewardPoints + depthProfile.scanRewardBonus)
 
         let facing: CGFloat = player.xScale < 0 ? -1 : 1
         let effectPosition = CGPoint(x: player.position.x + facing * (playerRadius + 20), y: player.position.y)
@@ -949,7 +950,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         updateWaveGenerator(deltaTime: deltaTime)
 
         statsHUD.update(stats: playerStats)
-        pointsHUD.update(points: pointsManager.points)
+        pointsHUD.update(points: pointsManager.points, depth: depth)
     }
 
     private func updateHostileFishNibble(deltaTime: TimeInterval) {

@@ -16,12 +16,21 @@ class AdvisorOverlay: SKNode {
     private let dimBackground = SKShapeNode()
     private let box = SKShapeNode()
     private let messageLabel = SKLabelNode()
-    private let continueButton = SKShapeNode()
+
+    /// Radius of the tappable area around the continue arrow — deliberately
+    /// much bigger than the glyph so it doesn't need a precise tap.
+    private static let continueHitRadius: CGFloat = 34
+    /// Built with real circle geometry (not a bare SKShapeNode) so the node
+    /// has a frame of its own; a path-less shape node has a zero-sized frame
+    /// and can't be hit-tested, even if it has visible children.
+    private let continueButton: SKShapeNode
 
     private var boxWidth: CGFloat = 300
     private let boxHeight: CGFloat = 120
 
     override init() {
+        continueButton = SKShapeNode(circleOfRadius: Self.continueHitRadius)
+
         super.init()
         zPosition = 400
         isHidden = true
@@ -52,13 +61,6 @@ class AdvisorOverlay: SKNode {
         arrowNode.fillColor = SKColor(red: 0.2, green: 0.85, blue: 0.3, alpha: 1.0)
         arrowNode.strokeColor = .clear
         continueButton.addChild(arrowNode)
-
-        // Generous invisible hit area, bigger than the arrow glyph itself
-        // so it's easy to tap without needing pixel-perfect precision.
-        let hitArea = SKShapeNode(circleOfRadius: 26)
-        hitArea.fillColor = .clear
-        hitArea.strokeColor = .clear
-        continueButton.addChild(hitArea)
 
         addChild(dimBackground)
         addChild(box)
@@ -100,10 +102,16 @@ class AdvisorOverlay: SKNode {
         isHidden = true
     }
 
-    /// `point` must be in this node's own coordinate space.
+    /// `point` must be in this node's own coordinate space. Uses a plain
+    /// distance check against the button's center rather than
+    /// SKNode.contains(_:), so it can't depend on how SpriteKit happens to
+    /// compute a shape node's bounding box.
     func hitTestContinue(_ point: CGPoint) -> Bool {
+        guard !isHidden else { return false }
         let pointInBox = box.convert(point, from: self)
-        return continueButton.contains(pointInBox)
+        let dx = pointInBox.x - continueButton.position.x
+        let dy = pointInBox.y - continueButton.position.y
+        return dx * dx + dy * dy <= Self.continueHitRadius * Self.continueHitRadius
     }
 
     private static func arrowPath(size: CGFloat) -> CGPath {
