@@ -86,6 +86,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let shopOverlay = ShopOverlay()
     private var isShopOpen = false
 
+    private let advisorOverlay = AdvisorOverlay()
+    private var isAdvisorShowing = false
+
     private let upgradeStore = UpgradeStore()
     private let durabilityBonusPerLevel = 20
 
@@ -122,6 +125,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var lastUpdateTime: TimeInterval = 0
     private var isFirstLevel = true
     var skipTutorial = false
+    var showAdvisorOnStart = false
 
     private var touchingSnakes: Set<Snake> = []
     private var snakeDamageTimer: TimeInterval = 0
@@ -152,6 +156,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setUpLoadingOverlay()
         setUpGameOverOverlay()
         setUpShopOverlay()
+        setUpAdvisorOverlay()
         setUpMapLimits()
         setUpIceRoof()
 
@@ -162,6 +167,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         generateLevel()
         setUpLevelEntrance()
+
+        if showAdvisorOnStart {
+            showAdvisorMessage(
+                "Welcome to Europa Diver! Pilot your submarine through the ice shelf, scan new fish species for points, and keep an eye on your power and durability — the deep isn't forgiving."
+            )
+        }
     }
 
     private func setUpBoundaries() {
@@ -356,6 +367,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         shopOverlay.resize(to: size)
     }
 
+    private func setUpAdvisorOverlay() {
+        cameraNode.addChild(advisorOverlay)
+        advisorOverlay.resize(to: size)
+    }
+
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
         repositionJoystick()
@@ -365,6 +381,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         loadingOverlay.resize(to: size)
         gameOverOverlay.resize(to: size)
         shopOverlay.resize(to: size)
+        advisorOverlay.resize(to: size)
     }
 
     private func isNearSpawn(_ position: CGPoint) -> Bool {
@@ -510,6 +527,23 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         shopOverlay.hide()
         gameOverOverlay.show()
         isShopOpen = false
+    }
+
+    /// Pauses the player, fish, and snakes and shows a dismissible message.
+    /// Physics is stopped entirely (not just our own per-frame movement
+    /// logic) so obstacle-collision damage can't fire and the player can't
+    /// coast on leftover velocity while this is up.
+    private func showAdvisorMessage(_ text: String) {
+        isAdvisorShowing = true
+        player.physicsBody?.velocity = .zero
+        physicsWorld.speed = 0
+        advisorOverlay.show(message: text)
+    }
+
+    private func dismissAdvisorMessage() {
+        isAdvisorShowing = false
+        physicsWorld.speed = 1
+        advisorOverlay.hide()
     }
 
     private func purchase(_ upgrade: Upgrade) {
@@ -746,6 +780,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if isAdvisorShowing {
+            if let touch = touches.first {
+                let pointInOverlay = advisorOverlay.convert(touch.location(in: self), from: self)
+                if advisorOverlay.hitTestContinue(pointInOverlay) {
+                    dismissAdvisorMessage()
+                }
+            }
+            return
+        }
+
         if isShopOpen {
             if let touch = touches.first {
                 let pointInOverlay = shopOverlay.convert(touch.location(in: self), from: self)
@@ -870,7 +914,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let deltaTime = lastUpdateTime == 0 ? 0 : currentTime - lastUpdateTime
         lastUpdateTime = currentTime
 
-        guard !isGameOver else { return }
+        guard !isGameOver, !isAdvisorShowing else { return }
 
         if !isLoadingLevel, let body = player.physicsBody {
             let input = joystick.vector

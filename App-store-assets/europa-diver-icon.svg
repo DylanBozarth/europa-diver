@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d3f7a"/>
+      <stop offset="1" stop-color="#08122e"/>
+    </linearGradient>
+    <radialGradient id="moon" cx="0.35" cy="0.3" r="0.9">
+      <stop offset="0" stop-color="#9fd0f0"/>
+      <stop offset="0.6" stop-color="#5a9fd8"/>
+      <stop offset="1" stop-color="#2f6bb5"/>
+    </radialGradient>
+    <linearGradient id="sub" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe45c"/>
+      <stop offset="1" stop-color="#f5b800"/>
+    </linearGradient>
+    <clipPath id="icon"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#icon)">
+    <rect width="512" height="512" fill="url(#sea)"/>
+
+    <!-- stars -->
+    <g fill="#ffffff" opacity="0.85">
+      <circle cx="70" cy="70" r="4"/><circle cx="120" cy="140" r="3"/>
+      <circle cx="60" cy="210" r="3"/><circle cx="450" cy="400" r="3"/>
+      <circle cx="400" cy="460" r="4"/><circle cx="470" cy="330" r="2.5"/>
+    </g>
+
+    <!-- icy moon -->
+    <g stroke="#1b2a4a" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+      <circle cx="330" cy="175" r="140" fill="url(#moon)"/>
+      <!-- cracks (Europa lines) -->
+      <g fill="none" stroke="#1f4a8f" stroke-width="6" opacity="0.95">
+        <path d="M215 130 L270 150 L300 120 L360 140"/>
+        <path d="M270 150 L285 215 L340 240"/>
+        <path d="M400 90 L380 150 L430 190"/>
+        <path d="M250 235 L215 200"/>
+      </g>
+      <!-- craters -->
+      <g fill="#3f7fc4" stroke-width="5">
+        <circle cx="395" cy="235" r="14"/>
+        <circle cx="340" cy="85" r="10"/>
+        <circle cx="305" cy="190" r="8"/>
+      </g>
+    </g>
+    <!-- moon shine -->
+    <path d="M240 110 Q265 70 315 55" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" opacity="0.8"/>
+
+    <!-- submarine -->
+    <g stroke="#6b3a00" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+      <!-- periscope -->
+      <rect x="236" y="196" width="12" height="50" fill="#f5b800"/>
+      <rect x="236" y="190" width="38" height="14" rx="7" fill="#f5b800"/>
+      <!-- tail fin + propeller -->
+      <path d="M118 335 L84 295 L104 335 L84 380 Z" fill="#f08a00"/>
+      <ellipse cx="82" cy="338" rx="9" ry="30" fill="#ff9d1a"/>
+      <!-- tower -->
+      <rect x="190" y="236" width="86" height="64" rx="22" fill="url(#sub)"/>
+      <!-- hull -->
+      <ellipse cx="238" cy="345" rx="140" ry="68" fill="url(#sub)"/>
+      <!-- portholes -->
+      <g fill="#bfeaff" stroke="#6b3a00" stroke-width="7">
+        <circle cx="180" cy="345" r="21"/>
+        <circle cx="240" cy="345" r="21"/>
+        <circle cx="300" cy="345" r="21"/>
+        <circle cx="233" cy="268" r="15"/>
+      </g>
+    </g>
+    <!-- sub highlights -->
+    <path d="M140 315 Q190 285 260 290" fill="none" stroke="#fff6b0" stroke-width="9" stroke-linecap="round" opacity="0.9"/>
+    <g fill="#ffffff" opacity="0.9">
+      <circle cx="173" cy="338" r="5"/><circle cx="233" cy="338" r="5"/><circle cx="293" cy="338" r="5"/>
+    </g>
+
+    <!-- bubbles -->
+    <g fill="#d9f3ff" fill-opacity="0.35" stroke="#d9f3ff" stroke-width="5">
+      <circle cx="410" cy="335" r="12"/>
+      <circle cx="432" cy="295" r="8"/>
+      <circle cx="418" cy="260" r="5"/>
+      <circle cx="60" cy="270" r="7"/>
+    </g>
+  </g>
+</svg>

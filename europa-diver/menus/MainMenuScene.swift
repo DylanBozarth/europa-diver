@@ -136,15 +136,16 @@ class MainMenuScene: SKScene {
         pointsManager.reset()
         upgradeStore.resetAll()
         surveyLog.resetAll()
-        startGame(skipTutorial: skipTutorial)
+        startGame(skipTutorial: skipTutorial, showAdvisorOnStart: true)
     }
 
-    private func startGame(skipTutorial: Bool = false) {
+    private func startGame(skipTutorial: Bool = false, showAdvisorOnStart: Bool = false) {
         guard let view else { return }
 
         let gameScene = GameScene(size: size)
         gameScene.scaleMode = .resizeFill
         gameScene.skipTutorial = skipTutorial
+        gameScene.showAdvisorOnStart = showAdvisorOnStart
         view.presentScene(gameScene, transition: SKTransition.fade(withDuration: 0.5))
     }
 
