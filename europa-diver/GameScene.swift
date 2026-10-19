@@ -36,10 +36,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var joystickTouch: UITouch?
     private let baseMoveSpeed: CGFloat = 110
     private let speedBonusPerLevel: CGFloat = 15
-    /// Base speed plus whatever the Speed upgrade currently adds.
+    /// Base speed plus whatever the Speed upgrade currently adds, further
+    /// multiplied while a Speed Thrust burst is active.
     private var moveSpeed: CGFloat {
-        baseMoveSpeed + CGFloat(upgradeStore.level(of: .speed)) * speedBonusPerLevel
+        let base = baseMoveSpeed + CGFloat(upgradeStore.level(of: .speed)) * speedBonusPerLevel
+        return isSpeedThrustActive ? base * speedThrustMultiplier : base
     }
+
+    private let speedThrustButton = HUDButton(icon: "💨")
+    private let speedThrustPowerCost = 15
+    private let speedThrustMultiplier: CGFloat = 1.5
+    private let speedThrustDuration: TimeInterval = 3.0
+    private var isSpeedThrustActive = false
+    private var speedThrustTimeRemaining: TimeInterval = 0
 
     private var pressedButtonTouches: [UITouch: HUDButton] = [:]
 
@@ -382,6 +391,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         cameraNode.addChild(shockButton)
         cameraNode.addChild(torpedoButton)
         cameraNode.addChild(autoRepairButton)
+        cameraNode.addChild(speedThrustButton)
         repositionHUDButtons()
         refreshAbilityButtonVisibility()
     }
@@ -393,15 +403,17 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         // Scan is the one button always available, so it anchors the
         // bottom-left corner; the upgrade-gated buttons (often hidden)
-        // stack above it in a 2-column grid rather than a single tall
-        // column, so the stack stays short enough to clear the power/
-        // durability bars anchored at the top-left on shorter screens.
+        // stack above it in a grid capped at 3 rows rather than growing
+        // taller with every new ability, so it stays clear of the power/
+        // durability bars anchored at the top-left on shorter screens —
+        // extra buttons add columns instead.
         scannerButton.position = CGPoint(x: x, y: bottomY)
         torpedoButton.position = CGPoint(x: x + spacing, y: bottomY)
         lightButton.position = CGPoint(x: x, y: bottomY + spacing)
         shieldButton.position = CGPoint(x: x + spacing, y: bottomY + spacing)
         shockButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
         autoRepairButton.position = CGPoint(x: x + spacing, y: bottomY + spacing * 2)
+        speedThrustButton.position = CGPoint(x: x + spacing * 2, y: bottomY + spacing * 2)
     }
 
     private func refreshAbilityButtonVisibility() {
@@ -413,6 +425,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         lightButton.isHidden = !upgradeStore.isOwned(.light)
         shieldButton.isHidden = !upgradeStore.isOwned(.shield)
         torpedoButton.isHidden = !upgradeStore.isOwned(.torpedo)
+        speedThrustButton.isHidden = !upgradeStore.isOwned(.speedThrust)
     }
 
     private func setUpStatsHUD() {
@@ -493,7 +506,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         ).generate()
 
         for slot in layout.obstacles where !isNearSpawn(slot.position) {
-            addObstacle(at: slot.position)
+            addObstacle(at: slot.position, material: slot.material)
         }
         for slot in layout.fishSlots where slot.kind != .hostile || !isNearSpawn(slot.position) {
             addFish(kind: slot.kind, appearanceIndex: slot.appearanceIndex, at: slot.position, roamHalfWidth: slot.roamHalfWidth)
@@ -686,6 +699,26 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         playerStats.adjustDurability(by: upgradeStore.level(of: .autoRepair) * autoRepairDurabilityPerLevel)
     }
 
+    private func triggerSpeedThrust() {
+        guard upgradeStore.isOwned(.speedThrust) else { return }
+        guard playerStats.power >= speedThrustPowerCost else { return }
+
+        playerStats.adjustPower(by: -speedThrustPowerCost)
+        isSpeedThrustActive = true
+        speedThrustTimeRemaining = speedThrustDuration
+        speedThrustButton.setToggledOn(true)
+    }
+
+    private func updateSpeedThrust(deltaTime: TimeInterval) {
+        guard isSpeedThrustActive else { return }
+
+        speedThrustTimeRemaining -= deltaTime
+        guard speedThrustTimeRemaining <= 0 else { return }
+
+        isSpeedThrustActive = false
+        speedThrustButton.setToggledOn(false)
+    }
+
     /// Passive regen: only while the player isn't giving any movement input,
     /// restores power once per second, scaled by the upgrade's level.
     private func updateWaveGenerator(deltaTime: TimeInterval) {
@@ -799,22 +832,54 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         levelEntrance = nil
     }
 
-    private func addObstacle(at position: CGPoint) {
+    private func addObstacle(at position: CGPoint, material: ObstacleMaterial) {
         let radius = WorldConstants.obstacleRadius
-        let rock = SKShapeNode(circleOfRadius: radius)
-        rock.name = "obstacle"
-        rock.position = position
-        rock.fillColor = SKColor(white: 0.4, alpha: 1.0)
-        rock.strokeColor = .darkGray
+        let chunk = SKShapeNode(path: obstacleChunkPath(radius: radius))
+        chunk.name = "obstacle"
+        chunk.position = position
+        chunk.zRotation = CGFloat.random(in: 0..<(2 * .pi))
 
+        switch material {
+        case .ice:
+            chunk.fillColor = SKColor(red: 0.75, green: 0.92, blue: 1.0, alpha: 0.9)
+            chunk.strokeColor = SKColor.white.withAlphaComponent(0.9)
+        case .rock:
+            chunk.fillColor = SKColor(white: 0.4, alpha: 1.0)
+            chunk.strokeColor = .darkGray
+        }
+
+        // Physics stays a plain circle regardless of the jagged visual
+        // silhouette — close enough for collision, and far simpler/cheaper
+        // than a polygon body.
         let body = SKPhysicsBody(circleOfRadius: radius)
         body.isDynamic = false
         body.categoryBitMask = PhysicsCategory.obstacle
         body.collisionBitMask = PhysicsCategory.player
-        rock.physicsBody = body
+        chunk.physicsBody = body
 
-        addChild(rock)
-        obstacles.append(rock)
+        addChild(chunk)
+        obstacles.append(chunk)
+    }
+
+    /// A jagged, roughly-circular polygon so obstacles read as chunks of
+    /// ice/rock rather than perfect circles.
+    private func obstacleChunkPath(radius: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        let pointCount = 9
+        let irregularity: CGFloat = 0.3
+
+        for index in 0..<pointCount {
+            let angle = (CGFloat(index) / CGFloat(pointCount)) * 2 * .pi
+            let pointRadius = radius * (1 - irregularity / 2 + CGFloat.random(in: 0...irregularity))
+            let point = CGPoint(x: cos(angle) * pointRadius, y: sin(angle) * pointRadius)
+            if index == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+        path.closeSubpath()
+        return path
     }
 
     private func addFish(kind: FishKind, appearanceIndex: Int, at position: CGPoint, roamHalfWidth: CGFloat) {
@@ -935,6 +1000,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
+        if let touch = touches.first(where: { hitTest(speedThrustButton, touch: $0) }) {
+            speedThrustButton.setPressed(true)
+            pressedButtonTouches[touch] = speedThrustButton
+            triggerSpeedThrust()
+            return
+        }
+
         if let touch = touches.first(where: { hitTest(scannerButton, touch: $0) }) {
             scannerButton.setPressed(true)
             pressedButtonTouches[touch] = scannerButton
@@ -1047,6 +1119,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         updateScan(deltaTime: deltaTime)
         updateWaveGenerator(deltaTime: deltaTime)
         updateLightDrain(deltaTime: deltaTime)
+        updateSpeedThrust(deltaTime: deltaTime)
 
         statsHUD.update(stats: playerStats)
         pointsHUD.update(points: pointsManager.points, depth: depth)

@@ -68,6 +68,14 @@ struct DepthProfile {
         lerpRange(from: 120...160, to: 60...90)
     }
 
+    /// Percent chance (0–100) that a given tunnel wall is rock rather than
+    /// ice. 0 at depth 1 (the tutorial is all ice shelf), climbing to pure
+    /// rock by max depth as the ice shelf gives way to the seabed.
+    var rockObstaclePercent: Int {
+        guard depth > 1 else { return 0 }
+        return Int(lerp(from: 0, to: 100).rounded())
+    }
+
     // MARK: - Fish
 
     /// Distance between fish. Tightens with depth so deeper waters are

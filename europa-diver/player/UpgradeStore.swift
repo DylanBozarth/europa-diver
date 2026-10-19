@@ -21,6 +21,7 @@ enum Upgrade: String, CaseIterable {
     case torpedo
     case waveGenerator
     case autoRepair
+    case speedThrust
 
     var displayName: String {
         switch self {
@@ -32,6 +33,7 @@ enum Upgrade: String, CaseIterable {
         case .torpedo: return "Torpedo"
         case .waveGenerator: return "Wave Generator"
         case .autoRepair: return "Auto Repair"
+        case .speedThrust: return "Speed Thrust"
         }
     }
 
@@ -45,6 +47,7 @@ enum Upgrade: String, CaseIterable {
         case .torpedo: return "🎯"
         case .waveGenerator: return "🌊"
         case .autoRepair: return "🔧"
+        case .speedThrust: return "💨"
         }
     }
 
@@ -60,6 +63,7 @@ enum Upgrade: String, CaseIterable {
         case .torpedo: return 55
         case .waveGenerator: return 50
         case .autoRepair: return 55
+        case .speedThrust: return 50
         }
     }
 

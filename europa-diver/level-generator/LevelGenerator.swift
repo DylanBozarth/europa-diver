@@ -13,18 +13,28 @@
 
 import CoreGraphics
 
+/// What a tunnel wall (and the obstacles making it up) is made of. Purely
+/// visual — both materials block and damage the player identically;
+/// DepthProfile.rockObstaclePercent decides the mix per depth.
+enum ObstacleMaterial {
+    case ice
+    case rock
+}
+
 struct LevelLayout {
     struct ObstacleSlot {
         let position: CGPoint
+        let material: ObstacleMaterial
     }
 
-    /// One floor-to-ceiling rock wall and the single passage through it.
-    /// `obstacles` holds the individual rocks that make these up; this is
+    /// One floor-to-ceiling wall and the single passage through it.
+    /// `obstacles` holds the individual chunks that make these up; this is
     /// the summary — handy for tests measuring how tight passages get.
     struct TunnelWall {
         let x: CGFloat
         let gapCenterY: CGFloat
         let gapHeight: CGFloat
+        let material: ObstacleMaterial
     }
 
     struct FishSlot {
@@ -152,20 +162,26 @@ struct LevelGenerator {
             let gapCenterY = CGFloat.random(
                 in: (worldBottom + margin + gapHeight / 2)...(worldTop - margin - gapHeight / 2)
             )
-            return LevelLayout.TunnelWall(x: x, gapCenterY: gapCenterY, gapHeight: gapHeight)
+            let material: ObstacleMaterial = Int.random(in: 0..<100) < profile.rockObstaclePercent ? .rock : .ice
+            return LevelLayout.TunnelWall(x: x, gapCenterY: gapCenterY, gapHeight: gapHeight, material: material)
         }
     }
 
     private func rocks(for wall: LevelLayout.TunnelWall) -> [LevelLayout.ObstacleSlot] {
-        stackedRocks(x: wall.x, from: worldBottom, to: wall.gapCenterY - wall.gapHeight / 2)
-            + stackedRocks(x: wall.x, from: wall.gapCenterY + wall.gapHeight / 2, to: worldTop)
+        stackedRocks(x: wall.x, from: worldBottom, to: wall.gapCenterY - wall.gapHeight / 2, material: wall.material)
+            + stackedRocks(x: wall.x, from: wall.gapCenterY + wall.gapHeight / 2, to: worldTop, material: wall.material)
     }
 
-    /// Chains rocks from `startY` to `endY` close enough together that
+    /// Chains chunks from `startY` to `endY` close enough together that
     /// consecutive ones always overlap (even with the horizontal jitter),
-    /// so the wall reads as one solid, slightly jagged rock face rather
-    /// than a perfect line of circles with gaps in it.
-    private func stackedRocks(x: CGFloat, from startY: CGFloat, to endY: CGFloat) -> [LevelLayout.ObstacleSlot] {
+    /// so the wall reads as one solid, slightly jagged face rather than a
+    /// perfect line of circles with gaps in it.
+    private func stackedRocks(
+        x: CGFloat,
+        from startY: CGFloat,
+        to endY: CGFloat,
+        material: ObstacleMaterial
+    ) -> [LevelLayout.ObstacleSlot] {
         guard endY > startY else { return [] }
 
         let radius = WorldConstants.obstacleRadius
@@ -176,7 +192,7 @@ struct LevelGenerator {
         var y = startY
         while y < endY {
             let jitteredX = x + CGFloat.random(in: -jitter...jitter)
-            slots.append(LevelLayout.ObstacleSlot(position: CGPoint(x: jitteredX, y: y)))
+            slots.append(LevelLayout.ObstacleSlot(position: CGPoint(x: jitteredX, y: y), material: material))
             y += step
         }
         return slots
