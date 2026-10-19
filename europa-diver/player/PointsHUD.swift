@@ -42,6 +42,6 @@ class PointsHUD: SKNode {
 
     func update(points: Int, depth: Int) {
         label.text = "Points: \(points)"
-        depthLabel.text = "Depth \(depth)"
+        depthLabel.text = "Depth \(depth) km"
     }
 }

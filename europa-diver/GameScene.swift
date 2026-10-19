@@ -133,6 +133,22 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     var skipTutorial = false
     var showAdvisorOnStart = false
 
+    /// Water color at the surface — fades linearly to pure black as
+    /// DepthProfile.darkness approaches 1.
+    private let shallowBackgroundRed: CGFloat = 0.02
+    private let shallowBackgroundGreen: CGFloat = 0.08
+    private let shallowBackgroundBlue: CGFloat = 0.18
+
+    private func updateBackgroundColor() {
+        let light = 1 - depthProfile.darkness
+        backgroundColor = SKColor(
+            red: shallowBackgroundRed * light,
+            green: shallowBackgroundGreen * light,
+            blue: shallowBackgroundBlue * light,
+            alpha: 1.0
+        )
+    }
+
     private var touchingSnakes: Set<Snake> = []
     private var snakeDamageTimer: TimeInterval = 0
     private let snakeDamageInterval: TimeInterval = 0.5
@@ -144,7 +160,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     override func didMove(to view: SKView) {
-        backgroundColor = SKColor(red: 0.02, green: 0.08, blue: 0.18, alpha: 1.0)
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
 
@@ -316,16 +331,17 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let spacing: CGFloat = 70
         let bottomY = -size.height / 2 + 80
 
-        // Scan is the one button always available, so it anchors the bottom-left
-        // corner; the upgrade-gated buttons (often hidden) stack above it.
-        // Torpedo sits next to scan instead of stacking, since they're both
-        // "fire and forget" actions rather than toggled defenses.
+        // Scan is the one button always available, so it anchors the
+        // bottom-left corner; the upgrade-gated buttons (often hidden)
+        // stack above it in a 2-column grid rather than a single tall
+        // column, so the stack stays short enough to clear the power/
+        // durability bars anchored at the top-left on shorter screens.
         scannerButton.position = CGPoint(x: x, y: bottomY)
         torpedoButton.position = CGPoint(x: x + spacing, y: bottomY)
         lightButton.position = CGPoint(x: x, y: bottomY + spacing)
-        shieldButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
-        shockButton.position = CGPoint(x: x, y: bottomY + spacing * 3)
-        autoRepairButton.position = CGPoint(x: x, y: bottomY + spacing * 4)
+        shieldButton.position = CGPoint(x: x + spacing, y: bottomY + spacing)
+        shockButton.position = CGPoint(x: x, y: bottomY + spacing * 2)
+        autoRepairButton.position = CGPoint(x: x + spacing, y: bottomY + spacing * 2)
     }
 
     private func refreshAbilityButtonVisibility() {
@@ -398,6 +414,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     /// the player has already scanned so it can fill the level with species
     /// they still need — the deeper the level, the more of those there are.
     private func generateLevel() {
+        updateBackgroundColor()
+
         let layout = LevelGenerator(
             worldMinX: worldMinX,
             worldMaxX: worldMaxX,

@@ -31,6 +31,9 @@ struct DepthProfile {
     /// Depth at which every ramping value reaches its maximum.
     static let maxRampDepth = 12
 
+    /// Depth at which the water turns fully black.
+    static let maxDarknessDepth = 10
+
     init(depth: Int) {
         self.depth = max(1, depth)
     }
@@ -38,6 +41,15 @@ struct DepthProfile {
     /// 0 at depth 1, 1 at `maxRampDepth` and beyond, linear in between.
     var progress: CGFloat {
         let ramp = CGFloat(Self.maxRampDepth - 1)
+        guard ramp > 0 else { return 1 }
+        return min(1, CGFloat(depth - 1) / ramp)
+    }
+
+    /// 0 at the surface, 1 (pitch black) by `maxDarknessDepth` and beyond.
+    /// Kept separate from `progress` since the environment should finish
+    /// going dark at a different depth than the difficulty ramp maxes out.
+    var darkness: CGFloat {
+        let ramp = CGFloat(Self.maxDarknessDepth - 1)
         guard ramp > 0 else { return 1 }
         return min(1, CGFloat(depth - 1) / ramp)
     }
