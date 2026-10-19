@@ -149,6 +149,25 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         )
     }
 
+    /// Visibility radius at depth 1 — generous enough that it never visibly
+    /// vignettes the screen before darkness actually starts ramping up.
+    private let maxVisibilityRadius: CGFloat = 900
+    private let lightUpgradeRadiusPerLevel: CGFloat = 80
+    private let darknessOverlay = DarknessOverlay()
+
+    /// Shrinks linearly to 0 by DepthProfile.maxDarknessDepth — at that
+    /// point the Light upgrade is the only remaining source of visibility,
+    /// by design (see GameScene's darkness feature).
+    private func currentVisibilityRadius() -> CGFloat {
+        let baseRadius = maxVisibilityRadius * (1 - depthProfile.darkness)
+        let lightBonus = CGFloat(upgradeStore.level(of: .light)) * lightUpgradeRadiusPerLevel
+        return baseRadius + lightBonus
+    }
+
+    private func updateDarknessOverlay() {
+        darknessOverlay.configure(screenSize: size, maxVerticalShift: worldTop, holeRadius: currentVisibilityRadius())
+    }
+
     private var touchingSnakes: Set<Snake> = []
     private var snakeDamageTimer: TimeInterval = 0
     private let snakeDamageInterval: TimeInterval = 0.5
