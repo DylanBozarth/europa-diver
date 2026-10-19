@@ -2,14 +2,26 @@
 //  SwiftUIIconRenderer.swift
 //  europa-diver
 //
-//  Shared helper for rendering a SwiftUI icon into an SKTexture. Guards
-//  against a known ImageRenderer timing quirk: querying `.uiImage`
-//  synchronously right after creation (exactly how every icon in this game
-//  is rendered, once per spawn) can return nil, or a non-nil image with
-//  nothing actually drawn into it. Either way, without this guard the
-//  sprite would be fully functional (still moves, still collides/damages)
-//  but completely invisible — this falls back to a plain, guaranteed-
-//  visible colored shape instead.
+//  Shared helper for rendering a SwiftUI icon into an SKTexture.
+//
+//  Renders `view` at its own natural size (every icon view declares its own
+//  outermost `.frame(width:height:)`, e.g. 210x170 for a fish) rather than
+//  forcing it into a frame matching the sprite's much smaller on-screen
+//  `size` — SwiftUI doesn't scale content down to fit a narrower outer
+//  frame, it clips to it, so imposing the sprite size here would crop off
+//  everything but a sliver of the center (exactly what was happening:
+//  fins, tails, eyes and spots laid out away from center were being
+//  rendered outside that crop and never appeared). `SKSpriteNode(texture:
+//  size:)` at each call site already scales the resulting texture to fit,
+//  so there's no need to pre-size the render canvas at all.
+//
+//  Also guards against a known ImageRenderer timing quirk: querying
+//  `.uiImage` synchronously right after creation (exactly how every icon
+//  in this game is rendered, once per spawn) can return nil, or a non-nil
+//  image with nothing actually drawn into it. Either way, without this
+//  guard the sprite would be fully functional (still moves, still
+//  collides/damages) but completely invisible — this falls back to a
+//  plain, guaranteed-visible colored shape instead.
 //
 
 import SwiftUI
@@ -18,7 +30,7 @@ import UIKit
 
 enum SwiftUIIconRenderer {
     static func render<V: View>(_ view: V, size: CGSize, fallbackColor: UIColor = .red) -> SKTexture {
-        let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
+        let renderer = ImageRenderer(content: view)
         renderer.scale = 3
 
         guard let uiImage = renderer.uiImage, !isEffectivelyBlank(uiImage) else {
