@@ -7,7 +7,7 @@
 //
 //  Levels track what's been bought and what it costs; most upgrades are
 //  wired to actual gameplay effects (see GameScene) that scale with level —
-//  Light and Shield only go as far as level 1 existing/being "owned" so far.
+//  Shield only goes as far as level 1 existing/being "owned" so far.
 //
 
 import Foundation

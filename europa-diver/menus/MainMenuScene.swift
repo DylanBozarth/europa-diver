@@ -28,6 +28,7 @@ class MainMenuScene: SKScene {
     private let pointsManager = PointsManager()
     private let upgradeStore = UpgradeStore()
     private let surveyLog = SurveyLog()
+    private let depthProgress = DepthProgress()
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.02, green: 0.08, blue: 0.18, alpha: 1.0)
@@ -136,16 +137,18 @@ class MainMenuScene: SKScene {
         pointsManager.reset()
         upgradeStore.resetAll()
         surveyLog.resetAll()
+        depthProgress.reset()
         startGame(skipTutorial: skipTutorial, showAdvisorOnStart: true)
     }
 
-    private func startGame(skipTutorial: Bool = false, showAdvisorOnStart: Bool = false) {
+    private func startGame(skipTutorial: Bool = false, showAdvisorOnStart: Bool = false, resumeDepth: Int = 1) {
         guard let view else { return }
 
         let gameScene = GameScene(size: size)
         gameScene.scaleMode = .resizeFill
         gameScene.skipTutorial = skipTutorial
         gameScene.showAdvisorOnStart = showAdvisorOnStart
+        gameScene.resumeDepth = resumeDepth
         view.presentScene(gameScene, transition: SKTransition.fade(withDuration: 0.5))
     }
 
@@ -177,7 +180,7 @@ class MainMenuScene: SKScene {
         if newGameButton.contains(point) {
             openNewGameOverlay()
         } else if continueButton.contains(point) {
-            startGame()
+            startGame(resumeDepth: depthProgress.depth)
         } else if shopButton.contains(point) {
             openShop()
         }

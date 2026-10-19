@@ -48,6 +48,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private let scannerButton = HUDButton(icon: "🔍")
     private let lightButton = HUDButton(icon: "💡")
+    private var isLightOn = false
+    private var lightDrainTimer: TimeInterval = 0
+    private let lightDrainInterval: TimeInterval = 0.5 // 1 power per tick, i.e. 2 power/sec
     private let shieldButton = HUDButton(icon: "🛡️")
     private let shockButton = HUDButton(icon: "⚡")
     private let shockRadius: CGFloat = 100
@@ -132,6 +135,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var depthProfile: DepthProfile { DepthProfile(depth: depth) }
     var skipTutorial = false
     var showAdvisorOnStart = false
+    var resumeDepth = 1
+    private let depthProgress = DepthProgress()
 
     /// Water color at the surface — fades linearly to pure black as
     /// DepthProfile.darkness approaches 1.
@@ -149,23 +154,57 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         )
     }
 
-    /// Visibility radius at depth 1 — generous enough that it never visibly
-    /// vignettes the screen before darkness actually starts ramping up.
-    private let maxVisibilityRadius: CGFloat = 900
-    private let lightUpgradeRadiusPerLevel: CGFloat = 80
+    /// Radius Light reveals per level, while switched on — there's no
+    /// passive "always visible near the player" radius otherwise, so the
+    /// submarine gets just as dark as everything else without it.
+    private let lightRadiusPerLevel: CGFloat = 180
     private let darknessOverlay = DarknessOverlay()
 
-    /// Shrinks linearly to 0 by DepthProfile.maxDarknessDepth — at that
-    /// point the Light upgrade is the only remaining source of visibility,
-    /// by design (see GameScene's darkness feature).
-    private func currentVisibilityRadius() -> CGFloat {
-        let baseRadius = maxVisibilityRadius * (1 - depthProfile.darkness)
-        let lightBonus = CGFloat(upgradeStore.level(of: .light)) * lightUpgradeRadiusPerLevel
-        return baseRadius + lightBonus
+    /// Zero whenever Light is off (or not owned) — only switching it on
+    /// reveals anything beyond the ambient darkness.
+    private func currentLightRadius() -> CGFloat {
+        guard isLightOn else { return 0 }
+        return CGFloat(upgradeStore.level(of: .light)) * lightRadiusPerLevel
+    }
+
+    private func toggleLight() {
+        guard upgradeStore.isOwned(.light) else { return }
+
+        if !isLightOn {
+            // Nothing to turn on if there's no power left to drain.
+            guard playerStats.power > 0 else { return }
+        }
+
+        isLightOn.toggle()
+        lightDrainTimer = 0
+        lightButton.setToggledOn(isLightOn)
+        updateDarknessOverlay()
+    }
+
+    private func updateLightDrain(deltaTime: TimeInterval) {
+        guard isLightOn else { return }
+
+        lightDrainTimer += deltaTime
+        while lightDrainTimer >= lightDrainInterval {
+            lightDrainTimer -= lightDrainInterval
+
+            guard playerStats.power > 0 else {
+                isLightOn = false
+                lightButton.setToggledOn(false)
+                updateDarknessOverlay()
+                return
+            }
+            playerStats.adjustPower(by: -1)
+        }
     }
 
     private func updateDarknessOverlay() {
-        darknessOverlay.configure(screenSize: size, maxVerticalShift: worldTop, holeRadius: currentVisibilityRadius())
+        darknessOverlay.configure(
+            screenSize: size,
+            maxVerticalShift: worldTop,
+            ambientDarkness: depthProfile.darkness,
+            lightRadius: currentLightRadius()
+        )
     }
 
     private var touchingSnakes: Set<Snake> = []
@@ -197,11 +236,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setUpGameOverOverlay()
         setUpShopOverlay()
         setUpAdvisorOverlay()
+        setUpDarknessOverlay()
         setUpMapLimits()
         setUpIceRoof()
 
-        if skipTutorial {
-            depth = 2
+        let startingDepth = skipTutorial ? max(2, resumeDepth) : resumeDepth
+        if startingDepth > 1 {
+            depth = startingDepth
             removeIceRoof()
         }
 
@@ -413,6 +454,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         advisorOverlay.resize(to: size)
     }
 
+    private func setUpDarknessOverlay() {
+        cameraNode.addChild(darknessOverlay)
+        updateDarknessOverlay()
+    }
+
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
         repositionJoystick()
@@ -423,6 +469,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         gameOverOverlay.resize(to: size)
         shopOverlay.resize(to: size)
         advisorOverlay.resize(to: size)
+        updateDarknessOverlay()
     }
 
     private func isNearSpawn(_ position: CGPoint) -> Bool {
@@ -434,6 +481,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     /// they still need — the deeper the level, the more of those there are.
     private func generateLevel() {
         updateBackgroundColor()
+        updateDarknessOverlay()
 
         let layout = LevelGenerator(
             worldMinX: worldMinX,
@@ -534,6 +582,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         guard !isGameOver else { return }
         isGameOver = true
 
+        depthProgress.save(depth)
         player.physicsBody?.velocity = .zero
         gameOverOverlay.show()
     }
@@ -592,6 +641,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         pointsHUD.update(points: pointsManager.points, depth: depth)
         shopOverlay.refresh(points: pointsManager.points, upgradeStore: upgradeStore)
         refreshAbilityButtonVisibility()
+
+        if upgrade == .light {
+            updateDarknessOverlay()
+        }
     }
 
     private func triggerElectricShock() {
@@ -875,6 +928,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
+        if let touch = touches.first(where: { hitTest(lightButton, touch: $0) }) {
+            lightButton.setPressed(true)
+            pressedButtonTouches[touch] = lightButton
+            toggleLight()
+            return
+        }
+
         if let touch = touches.first(where: { hitTest(scannerButton, touch: $0) }) {
             scannerButton.setPressed(true)
             pressedButtonTouches[touch] = scannerButton
@@ -964,6 +1024,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         cameraNode.position.x = player.position.x
         scanProgressBar.position = CGPoint(x: player.position.x, y: player.position.y + playerRadius + 15)
+        darknessOverlay.trackPlayer(yOffset: player.position.y)
 
         let obstaclePositions = obstacles.map { $0.position }
         fish.forEach { $0.update(deltaTime: deltaTime, playerPosition: player.position, nearbyObstacles: obstaclePositions) }
@@ -985,6 +1046,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         updateSnakeDamage(deltaTime: deltaTime)
         updateScan(deltaTime: deltaTime)
         updateWaveGenerator(deltaTime: deltaTime)
+        updateLightDrain(deltaTime: deltaTime)
 
         statsHUD.update(stats: playerStats)
         pointsHUD.update(points: pointsManager.points, depth: depth)
