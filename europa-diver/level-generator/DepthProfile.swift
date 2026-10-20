@@ -151,10 +151,12 @@ struct DepthProfile {
 
     // MARK: - Other spawns
 
-    /// Objects of interest get a little denser with depth — a minor reward
-    /// bump alongside the extra species.
+    /// Objects of interest are rare — worth hunting for at 1000 points each,
+    /// not something you trip over. Still a little denser with depth, same
+    /// as everything else, but the whole range is pulled way out compared
+    /// to a normal spawn.
     var ooiSpacing: ClosedRange<CGFloat> {
-        lerpRange(from: 400...700, to: 250...450)
+        lerpRange(from: 1600...2400, to: 1000...1600)
     }
 
     var emptySlotSpacing: ClosedRange<CGFloat> { 500...900 }

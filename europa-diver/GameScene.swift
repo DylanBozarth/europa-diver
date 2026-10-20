@@ -49,6 +49,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let speedThrustDuration: TimeInterval = 3.0
     private var isSpeedThrustActive = false
     private var speedThrustTimeRemaining: TimeInterval = 0
+    private var speedThrustTrailTimer: TimeInterval = 0
+    private let speedThrustTrailInterval: TimeInterval = 0.06
 
     private var pressedButtonTouches: [UITouch: HUDButton] = [:]
 
@@ -61,6 +63,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var lightDrainTimer: TimeInterval = 0
     private let lightDrainInterval: TimeInterval = 0.5 // 1 power per tick, i.e. 2 power/sec
     private let shieldButton = HUDButton(icon: "🛡️")
+    private let shieldPowerCost = 20
+    private let shieldDurationByLevel: [Int: TimeInterval] = [1: 1.5, 2: 2.5, 3: 3.5]
+    private var isShieldActive = false
+    private var shieldTimeRemaining: TimeInterval = 0
+
     private let shockButton = HUDButton(icon: "⚡")
     private let shockRadius: CGFloat = 100
     private let shockPowerCost = 20
@@ -90,7 +97,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private let pointsManager = PointsManager()
     private let pointsHUD = PointsHUD()
-    private let ooiPointValue = 10
+    private let ooiPointValue = 1000
 
     private let gameOverOverlay = GameOverOverlay()
     private var isGameOver = false
@@ -363,7 +370,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         body.restitution = 0.2
         body.categoryBitMask = PhysicsCategory.player
         body.collisionBitMask = PhysicsCategory.obstacle | PhysicsCategory.wall
-        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.largeFish | PhysicsCategory.hostileFish | PhysicsCategory.ooi | PhysicsCategory.levelEntrance | PhysicsCategory.snake
+        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.largeFish | PhysicsCategory.hostileFish | PhysicsCategory.levelEntrance | PhysicsCategory.snake
         player.physicsBody = body
 
         addChild(player)
@@ -676,6 +683,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             target.removeFromParent()
             touchingHostileFish.remove(target)
         }
+
+        ElectricShockEffect.spawn(at: player.position, radius: shockRadius, in: self)
         fish.removeAll { nearbyFish.contains($0) }
     }
 
@@ -697,6 +706,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         playerStats.adjustPower(by: -autoRepairPowerCost)
         playerStats.adjustDurability(by: upgradeStore.level(of: .autoRepair) * autoRepairDurabilityPerLevel)
+        AutoRepairEffect.spawn(at: CGPoint(x: player.position.x, y: player.position.y + playerRadius + 10), in: self)
     }
 
     private func triggerSpeedThrust() {
@@ -712,11 +722,43 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private func updateSpeedThrust(deltaTime: TimeInterval) {
         guard isSpeedThrustActive else { return }
 
+        speedThrustTrailTimer += deltaTime
+        if speedThrustTrailTimer >= speedThrustTrailInterval {
+            speedThrustTrailTimer = 0
+            let facing: CGFloat = player.xScale < 0 ? -1 : 1
+            let tailPosition = CGPoint(x: player.position.x - facing * playerRadius, y: player.position.y)
+            SpeedTrailEffect.spawn(at: tailPosition, facing: facing, in: self)
+        }
+
         speedThrustTimeRemaining -= deltaTime
         guard speedThrustTimeRemaining <= 0 else { return }
 
         isSpeedThrustActive = false
         speedThrustButton.setToggledOn(false)
+    }
+
+    private func triggerShield() {
+        guard upgradeStore.isOwned(.shield), !isShieldActive else { return }
+        guard let duration = shieldDurationByLevel[upgradeStore.level(of: .shield)] else { return }
+        guard playerStats.power >= shieldPowerCost else { return }
+
+        playerStats.adjustPower(by: -shieldPowerCost)
+        isShieldActive = true
+        shieldTimeRemaining = duration
+        shieldButton.setToggledOn(true)
+        player.color = .red
+        player.colorBlendFactor = 0.6
+    }
+
+    private func updateShield(deltaTime: TimeInterval) {
+        guard isShieldActive else { return }
+
+        shieldTimeRemaining -= deltaTime
+        guard shieldTimeRemaining <= 0 else { return }
+
+        isShieldActive = false
+        shieldButton.setToggledOn(false)
+        player.colorBlendFactor = 0
     }
 
     /// Passive regen: only while the player isn't giving any movement input,
@@ -739,9 +781,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private func startScan() {
         guard scanTarget == nil else { return }
 
-        let candidates: [any Scannable] = fish + smallSnakes
+        let ooisInLevel = children.compactMap { $0 as? OOI }
+        let candidates: [any Scannable] = fish + smallSnakes + ooisInLevel
         let target = candidates.first { candidate in
-            guard !surveyLog.hasScanned(candidate.speciesID) else { return false }
+            // OOIs have no "species" to track as already-found — every
+            // instance is independently scannable and consumed on pickup.
+            if !(candidate is OOI) {
+                guard !surveyLog.hasScanned(candidate.speciesID) else { return false }
+            }
             let dx = candidate.position.x - player.position.x
             let dy = candidate.position.y - player.position.y
             return sqrt(dx * dx + dy * dy) <= scanRadius
@@ -784,12 +831,20 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         if let smallSnakeTarget = target as? SmallSnake {
             return smallSnakes.contains(smallSnakeTarget)
         }
+        if let ooiTarget = target as? OOI {
+            return ooiTarget.parent != nil
+        }
         return false
     }
 
     private func completeScan(for target: any Scannable) {
-        surveyLog.markScanned(target.speciesID)
-        pointsManager.addPoints(scanRewardPoints + depthProfile.scanRewardBonus)
+        if let ooiTarget = target as? OOI {
+            pointsManager.addPoints(ooiPointValue)
+            ooiTarget.removeFromParent()
+        } else {
+            surveyLog.markScanned(target.speciesID)
+            pointsManager.addPoints(scanRewardPoints + depthProfile.scanRewardBonus)
+        }
 
         let facing: CGFloat = player.xScale < 0 ? -1 : 1
         let effectPosition = CGPoint(x: player.position.x + facing * (playerRadius + 20), y: player.position.y)
@@ -979,6 +1034,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
+        if let touch = touches.first(where: { hitTest(shieldButton, touch: $0) }) {
+            shieldButton.setPressed(true)
+            pressedButtonTouches[touch] = shieldButton
+            triggerShield()
+            return
+        }
+
         if let touch = touches.first(where: { hitTest(torpedoButton, touch: $0) }) {
             torpedoButton.setPressed(true)
             pressedButtonTouches[touch] = torpedoButton
@@ -1120,6 +1182,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         updateWaveGenerator(deltaTime: deltaTime)
         updateLightDrain(deltaTime: deltaTime)
         updateSpeedThrust(deltaTime: deltaTime)
+        updateShield(deltaTime: deltaTime)
 
         statsHUD.update(stats: playerStats)
         pointsHUD.update(points: pointsManager.points, depth: depth)
@@ -1172,6 +1235,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func applyDurabilityDamage(_ amount: Int) {
+        guard !isShieldActive else { return }
+
         playerStats.adjustDurability(by: -amount)
         spinPlayer()
 
@@ -1180,7 +1245,15 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    /// Always starts the spin from upright (zRotation = 0), not wherever a
+    /// still-running spin happens to be. Damage can repeat faster than this
+    /// animation's 0.4s duration (obstacle/snake/fish damage all tick on a
+    /// similar cadence), and `run(_:withKey:)` replaces the in-flight spin
+    /// outright — without this reset, a replaced spin leaves the sub at
+    /// whatever partial angle it had reached, and enough rapid hits in a
+    /// row can strand it pointing any which way once the damage stops.
     private func spinPlayer() {
+        player.zRotation = 0
         let spin = SKAction.rotate(byAngle: -.pi * 2, duration: 0.4)
         player.run(spin, withKey: "damageSpin")
     }
@@ -1208,14 +1281,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         if categories.contains(PhysicsCategory.torpedo) {
             handleTorpedoContact(contact)
-        }
-
-        if categories.contains(PhysicsCategory.ooi) {
-            let ooi = [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? OOI }.first
-            if ooi != nil {
-                pointsManager.addPoints(ooiPointValue)
-            }
-            ooi?.removeFromParent()
         }
 
         if categories.contains(PhysicsCategory.levelEntrance) {
@@ -1282,6 +1347,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func flashPlayerRed() {
+        guard !isShieldActive else { return }
+
         player.run(SKAction.sequence([
             SKAction.run { [weak self] in
                 self?.player.color = .red

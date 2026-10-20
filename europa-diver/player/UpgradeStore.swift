@@ -5,9 +5,10 @@
 //  Tracks each submarine upgrade's purchased level. Persists across
 //  retries and app relaunches (backed by UserDefaults), same as points.
 //
-//  Levels track what's been bought and what it costs; most upgrades are
-//  wired to actual gameplay effects (see GameScene) that scale with level —
-//  Shield only goes as far as level 1 existing/being "owned" so far.
+//  Levels track what's been bought and what it costs; every upgrade is
+//  wired to an actual gameplay effect (see GameScene) — some (Durability,
+//  Speed, Shield, ...) scale per level, others (Electric Shock, Torpedo)
+//  just unlock at level 1 for now.
 //
 
 import Foundation
