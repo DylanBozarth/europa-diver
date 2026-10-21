@@ -119,12 +119,13 @@ struct LevelGenerator {
         )
     }
 
-    private func positions(spacing: ClosedRange<CGFloat>) -> [CGFloat] {
+    private func positions(spacing: ClosedRange<CGFloat>, in bounds: ClosedRange<CGFloat>? = nil) -> [CGFloat] {
+        let range = bounds ?? (worldMinX...worldMaxX)
         var xs: [CGFloat] = []
-        var x = worldMinX
-        while x <= worldMaxX {
+        var x = range.lowerBound
+        while x <= range.upperBound {
             x += CGFloat.random(in: spacing)
-            guard x <= worldMaxX else { break }
+            guard x <= range.upperBound else { break }
             xs.append(x)
         }
         return xs
@@ -199,7 +200,7 @@ struct LevelGenerator {
     }
 
     private func generateFish() -> [LevelLayout.FishSlot] {
-        let xs = positions(spacing: profile.fishSpacing)
+        let xs = profile.depth == 1 ? edgeFishXs() : positions(spacing: profile.fishSpacing)
         guard !xs.isEmpty else { return [] }
 
         // Decide which slots are hostile first, then hand every remaining
@@ -281,8 +282,25 @@ struct LevelGenerator {
         return assignments.shuffled()
     }
 
+    /// Tutorial-only: fish only spawn near the far edges of the world,
+    /// well outside the player's starting view, so the first-fish tip
+    /// triggers once they've actually swum to find one instead of firing
+    /// immediately at spawn.
+    private func edgeFishXs() -> [CGFloat] {
+        let edgeBandWidth = (worldMaxX - worldMinX) * 0.2
+        guard edgeBandWidth > 0 else { return [] }
+
+        let left = positions(spacing: profile.fishSpacing, in: worldMinX...(worldMinX + edgeBandWidth))
+        let right = positions(spacing: profile.fishSpacing, in: (worldMaxX - edgeBandWidth)...worldMaxX)
+        return left + right
+    }
+
     private func generateOOIs() -> [LevelLayout.OOISlot] {
-        positions(spacing: profile.ooiSpacing).map {
+        // Held back from the tutorial entirely — depth 1 is about teaching
+        // scanning on fish, not objects of interest.
+        guard profile.depth > 1 else { return [] }
+
+        return positions(spacing: profile.ooiSpacing).map {
             LevelLayout.OOISlot(position: CGPoint(x: $0, y: randomY(margin: 40)))
         }
     }

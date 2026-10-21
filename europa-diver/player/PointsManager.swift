@@ -30,6 +30,14 @@ class PointsManager {
         return true
     }
 
+    /// Subtracts up to `amount`, clamped at 0 rather than failing like
+    /// `spendPoints` — used for penalties (e.g. dying) that apply regardless
+    /// of balance.
+    func losePoints(_ amount: Int) {
+        points = max(0, points - amount)
+        UserDefaults.standard.set(points, forKey: PointsManager.storageKey)
+    }
+
     /// Erases the saved point total. Used when starting a New Game.
     func reset() {
         points = 0

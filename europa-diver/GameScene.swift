@@ -98,6 +98,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let pointsManager = PointsManager()
     private let pointsHUD = PointsHUD()
     private let ooiPointValue = 1000
+    private let deathPointPenalty = 500
 
     private let gameOverOverlay = GameOverOverlay()
     private var isGameOver = false
@@ -107,6 +108,17 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private let advisorOverlay = AdvisorOverlay()
     private var isAdvisorShowing = false
+    /// Tutorial-only: the first time a fish comes on screen during a brand
+    /// new game, the camera zooms in on it and the advisor explains scanning.
+    private var hasShownFirstFishAdvisor = false
+    /// Not tutorial-gated — fires the first time an OOI is seen on screen in
+    /// this play session, any depth, new game or continued one. Still
+    /// skipped entirely when the player chose "skip tutorial," like every
+    /// other advisor message.
+    private var hasShownFirstOOIAdvisor = false
+    private var hasShownFirstDeathAdvisor = false
+    private var hasShownFirstLevelEntranceAdvisor = false
+    private let firstFishAdvisorZoomScale: CGFloat = 0.5
 
     private let upgradeStore = UpgradeStore()
     private let durabilityBonusPerLevel = 20
@@ -263,12 +275,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
 
         generateLevel()
-        setUpLevelEntrance()
+        if canSpawnLevelEntrance() {
+            setUpLevelEntrance()
+        }
 
         if showAdvisorOnStart {
-            showAdvisorMessage(
-                "Welcome to Europa Diver! Pilot your submarine through the ice shelf, scan new fish species for points, and keep an eye on your power and durability — the deep isn't forgiving."
-            )
+            showAdvisorMessage(AdvisorMessages.welcome)
         }
     }
 
@@ -532,6 +544,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    /// On the tutorial level, the entrance is held back until the player has
+    /// already seen the first-fish tip — otherwise a lucky spawn could let
+    /// them reach it before ever encountering a fish. (OOI can't spawn on
+    /// depth 1 at all, so there's nothing to wait on there.) The `!showAdvisorOnStart`
+    /// escape hatch matters too: if this session was never going to show
+    /// tutorial tips at all (e.g. Continuing with no saved progress, which
+    /// also lands on depth 1), waiting on a fish tip that'll never fire
+    /// would soft-lock the level. Every other depth spawns it immediately,
+    /// same as before.
+    private func canSpawnLevelEntrance() -> Bool {
+        depth > 1 || !showAdvisorOnStart || hasShownFirstFishAdvisor
+    }
+
     private func setUpLevelEntrance() {
         let entrance = LevelEntrance()
         entrance.position = randomLevelEntrancePosition()
@@ -591,7 +616,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private func rebuildLevel() {
         clearLevel()
         generateLevel()
-        setUpLevelEntrance()
+        if canSpawnLevelEntrance() {
+            setUpLevelEntrance()
+        }
 
         player.position = spawnPosition
         player.physicsBody?.velocity = .zero
@@ -603,8 +630,15 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         isGameOver = true
 
         depthProgress.save(depth)
+        pointsManager.losePoints(deathPointPenalty)
+        pointsHUD.update(points: pointsManager.points, depth: depth)
         player.physicsBody?.velocity = .zero
         gameOverOverlay.show()
+
+        if showAdvisorOnStart, !hasShownFirstDeathAdvisor {
+            hasShownFirstDeathAdvisor = true
+            showAdvisorMessage(AdvisorMessages.firstDeath)
+        }
     }
 
     private func retryGame() {
@@ -651,6 +685,61 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         isAdvisorShowing = false
         physicsWorld.speed = 1
         advisorOverlay.hide()
+
+        // Only y/scale animate back — update() takes over following the
+        // player's x position again as soon as isAdvisorShowing goes false.
+        let zoomOut = SKAction.group([
+            SKAction.moveTo(y: 0, duration: 0.4),
+            SKAction.scale(to: 1, duration: 0.4)
+        ])
+        zoomOut.timingMode = .easeInEaseOut
+        cameraNode.run(zoomOut)
+    }
+
+    /// Tutorial-only hook: the first time a fish is visible on screen during
+    /// a brand new game, pan/zoom the camera onto it before showing the
+    /// scanning tip, so the player has something concrete to look at.
+    private func triggerFirstFishAdvisor(for fish: Fish) {
+        hasShownFirstFishAdvisor = true
+
+        let zoomIn = SKAction.group([
+            SKAction.move(to: fish.position, duration: 0.5),
+            SKAction.scale(to: firstFishAdvisorZoomScale, duration: 0.5)
+        ])
+        zoomIn.timingMode = .easeInEaseOut
+        cameraNode.run(zoomIn)
+
+        showAdvisorMessage(AdvisorMessages.firstFish)
+    }
+
+    /// Tutorial-only hook: same as `triggerFirstFishAdvisor`, but for the
+    /// first Object of Interest spotted on screen.
+    private func triggerFirstOOIAdvisor(for ooi: OOI) {
+        hasShownFirstOOIAdvisor = true
+
+        let zoomIn = SKAction.group([
+            SKAction.move(to: ooi.position, duration: 0.5),
+            SKAction.scale(to: firstFishAdvisorZoomScale, duration: 0.5)
+        ])
+        zoomIn.timingMode = .easeInEaseOut
+        cameraNode.run(zoomIn)
+
+        showAdvisorMessage(AdvisorMessages.firstOOI)
+    }
+
+    /// Tutorial-only hook: same as `triggerFirstFishAdvisor`, but for the
+    /// next-level entrance.
+    private func triggerFirstLevelEntranceAdvisor(for entrance: LevelEntrance) {
+        hasShownFirstLevelEntranceAdvisor = true
+
+        let zoomIn = SKAction.group([
+            SKAction.move(to: entrance.position, duration: 0.5),
+            SKAction.scale(to: firstFishAdvisorZoomScale, duration: 0.5)
+        ])
+        zoomIn.timingMode = .easeInEaseOut
+        cameraNode.run(zoomIn)
+
+        showAdvisorMessage(AdvisorMessages.firstLevelEntrance)
     }
 
     private func purchase(_ upgrade: Upgrade) {
@@ -1174,6 +1263,21 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 worldBottom: worldBottom,
                 worldTop: worldTop
             )
+        }
+
+        if showAdvisorOnStart, !hasShownFirstFishAdvisor, !isAdvisorShowing, let spotted = fish.first(where: { isOnScreen($0.position) }) {
+            triggerFirstFishAdvisor(for: spotted)
+        }
+        if !skipTutorial, !hasShownFirstOOIAdvisor, !isAdvisorShowing,
+           let spottedOOI = children.compactMap({ $0 as? OOI }).first(where: { isOnScreen($0.position) }) {
+            triggerFirstOOIAdvisor(for: spottedOOI)
+        }
+        if levelEntrance == nil, canSpawnLevelEntrance() {
+            setUpLevelEntrance()
+        }
+        if showAdvisorOnStart, !hasShownFirstLevelEntranceAdvisor, !isAdvisorShowing,
+           let entrance = levelEntrance, isOnScreen(entrance.position) {
+            triggerFirstLevelEntranceAdvisor(for: entrance)
         }
 
         updateHostileFishNibble(deltaTime: deltaTime)

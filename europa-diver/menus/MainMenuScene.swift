@@ -138,7 +138,7 @@ class MainMenuScene: SKScene {
         upgradeStore.resetAll()
         surveyLog.resetAll()
         depthProgress.reset()
-        startGame(skipTutorial: skipTutorial, showAdvisorOnStart: true)
+        startGame(skipTutorial: skipTutorial, showAdvisorOnStart: !skipTutorial)
     }
 
     private func startGame(skipTutorial: Bool = false, showAdvisorOnStart: Bool = false, resumeDepth: Int = 1) {
