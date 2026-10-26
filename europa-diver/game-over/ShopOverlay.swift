@@ -100,6 +100,7 @@ class ShopOverlay: SKNode {
     /// real padding between them instead of them running into each other.
     private let columns = 3
     private let rowPadding: CGFloat = 18
+    private let columnPadding: CGFloat = 20
 
     override init() {
         super.init()
@@ -169,10 +170,12 @@ class ShopOverlay: SKNode {
     /// Spreads every element out to use the full screen (title near the
     /// top, close button near the bottom, upgrade grid filling what's left
     /// between them) instead of a small cluster in the middle. Rows use a
-    /// fixed, comfortably-padded spacing and are centered as a block in
-    /// whatever vertical room is left — they only shrink (uniformly, via
-    /// setScale) on a screen too short to fit that spacing without the
-    /// fallback actually overlapping.
+    /// fixed, comfortably-padded spacing in both directions and are
+    /// centered as a block in whatever room is left — they only shrink
+    /// (uniformly, via setScale) on a screen too small to fit that spacing
+    /// without cards actually bleeding into each other. Both axes share the
+    /// same scale so a width-constrained shrink doesn't leave height
+    /// spacing (or vice versa) looking inconsistent with the cards' new size.
     private func layout(for size: CGSize) {
         let halfHeight = size.height / 2
 
@@ -185,17 +188,26 @@ class ShopOverlay: SKNode {
         let gridTop = pointsLabel.position.y - 45
         let gridBottom = closeY + 55
         let availableHeight = gridTop - gridBottom
+        let availableWidth = size.width - 40
 
         let rowCount = Int(ceil(Double(rows.count) / Double(columns)))
-        let gapCount = CGFloat(max(rowCount - 1, 0))
-        let idealRowSpacing = ShopUpgradeRow.size.height + rowPadding
-        let neededHeight = idealRowSpacing * gapCount
-        let scale = neededHeight > 0 ? min(1, availableHeight / neededHeight) : 1
-        let rowSpacing = idealRowSpacing * scale
+        let rowGapCount = CGFloat(max(rowCount - 1, 0))
+        let columnGapCount = CGFloat(max(columns - 1, 0))
 
-        let gridHeight = rowSpacing * gapCount
+        let idealRowSpacing = ShopUpgradeRow.size.height + rowPadding
+        let idealColumnSpacing = ShopUpgradeRow.size.width + columnPadding
+
+        let neededHeight = idealRowSpacing * rowGapCount
+        let neededWidth = idealColumnSpacing * columnGapCount
+        let verticalScale = neededHeight > 0 ? min(1, availableHeight / neededHeight) : 1
+        let horizontalScale = neededWidth > 0 ? min(1, availableWidth / neededWidth) : 1
+        let scale = min(verticalScale, horizontalScale)
+
+        let rowSpacing = idealRowSpacing * scale
+        let columnSpacing = idealColumnSpacing * scale
+
+        let gridHeight = rowSpacing * rowGapCount
         let firstRowY = (gridTop + gridBottom) / 2 + gridHeight / 2
-        let columnSpacing = min(max(size.width * 0.24, 200), 240)
 
         for (index, row) in rows.enumerated() {
             let column = index % columns

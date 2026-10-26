@@ -29,6 +29,8 @@ class MainMenuScene: SKScene {
     private let upgradeStore = UpgradeStore()
     private let surveyLog = SurveyLog()
     private let depthProgress = DepthProgress()
+    private let deathPenaltyWaiver = DeathPenaltyWaiver()
+    private let difficultySettings = DifficultySettings()
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.02, green: 0.08, blue: 0.18, alpha: 1.0)
@@ -130,7 +132,7 @@ class MainMenuScene: SKScene {
         isNewGameOverlayOpen = true
     }
 
-    private func confirmNewGame(skipTutorial: Bool) {
+    private func confirmNewGame(skipTutorial: Bool, difficulty: Difficulty) {
         newGameOverlay.hide()
         isNewGameOverlayOpen = false
 
@@ -138,6 +140,8 @@ class MainMenuScene: SKScene {
         upgradeStore.resetAll()
         surveyLog.resetAll()
         depthProgress.reset()
+        deathPenaltyWaiver.reset()
+        difficultySettings.set(difficulty)
         startGame(skipTutorial: skipTutorial, showAdvisorOnStart: !skipTutorial)
     }
 
@@ -170,7 +174,7 @@ class MainMenuScene: SKScene {
             let pointInOverlay = newGameOverlay.convert(point, from: self)
             let result = newGameOverlay.handleTouch(pointInOverlay)
             if result.startGame {
-                confirmNewGame(skipTutorial: result.skipTutorial)
+                confirmNewGame(skipTutorial: result.skipTutorial, difficulty: result.difficulty)
             } else if newGameOverlay.isHidden {
                 isNewGameOverlayOpen = false
             }

@@ -91,17 +91,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var scanTarget: (any Scannable)?
     private var scanElapsed: TimeInterval = 0
     private let scanDuration: TimeInterval = 3.0
-    private let scanRewardPoints = 300
 
     private let statsHUD = PlayerStatsHUD()
 
     private let pointsManager = PointsManager()
     private let pointsHUD = PointsHUD()
-    private let ooiPointValue = 1000
     private let deathPointPenalty = 500
+    private let difficultySettings = DifficultySettings()
 
     private let gameOverOverlay = GameOverOverlay()
     private var isGameOver = false
+
+    private let outOfFundingOverlay = OutOfFundingOverlay()
+    private var isOutOfFunding = false
 
     private let shopOverlay = ShopOverlay()
     private var isShopOpen = false
@@ -136,7 +138,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let worldTop: CGFloat = 180
     private let worldBottom: CGFloat = -180
 
-    private let screensEachSide = 3
+    /// Total level width, in screens. Spawn sits near the left edge (see
+    /// setUpMapLimits) rather than the center, so every level reads as a
+    /// one-way trip rightward instead of something to explore in both
+    /// directions.
+    private let levelScreensWide: CGFloat = 6
     private var worldMinX: CGFloat = 0
     private var worldMaxX: CGFloat = 0
 
@@ -165,6 +171,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     var showAdvisorOnStart = false
     var resumeDepth = 1
     private let depthProgress = DepthProgress()
+    private let deathPenaltyWaiver = DeathPenaltyWaiver()
 
     /// Water color at the surface — fades linearly to pure black as
     /// DepthProfile.darkness approaches 1.
@@ -262,6 +269,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setUpPointsHUD()
         setUpLoadingOverlay()
         setUpGameOverOverlay()
+        setUpOutOfFundingOverlay()
         setUpShopOverlay()
         setUpAdvisorOverlay()
         setUpDarknessOverlay()
@@ -294,38 +302,39 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func setUpMapLimits() {
-        let halfWorldWidth = size.width * CGFloat(screensEachSide)
-        worldMinX = player.position.x - halfWorldWidth
-        worldMaxX = player.position.x + halfWorldWidth
+        // A small buffer behind spawn rather than a symmetric span — the
+        // level is meant to be crossed left-to-right, not explored in both
+        // directions.
+        let leftMargin = size.width * 0.5
+        worldMinX = player.position.x - leftMargin
+        worldMaxX = worldMinX + size.width * levelScreensWide
 
         addBoundaryWall(at: worldMinX)
         addBoundaryWall(at: worldMaxX)
     }
 
-    /// Tutorial-only ice ceiling. The patch above spawn is visually marked as
-    /// thinner ice (where the sub "came in from"), but the whole roof is
-    /// solid — nothing passes through it, including that patch.
+    /// Tutorial-only ice ceiling, built from the same jagged chunks as the
+    /// ice obstacles so it reads as a real shelf rather than a tiled floor.
+    /// The patch above spawn is visually marked as thinner ice (where the
+    /// sub "came in from"), but the whole roof is solid — nothing passes
+    /// through it, including that patch. The chunks are decorative only;
+    /// collision is the single continuous edge below, which can't let the
+    /// player squeeze through a seam between chunks the way separate
+    /// circular bodies could.
     private func setUpIceRoof() {
-        let squareSize: CGFloat = 40
         let holePatchHalfWidth: CGFloat = 40
+        let step = WorldConstants.obstacleRadius * 1.5
+        let jitter = WorldConstants.obstacleRadius * 0.3
 
         var x = worldMinX
         while x < worldMaxX {
-            let squareCenter = x + squareSize / 2
-            let isHolePatch = squareCenter >= -holePatchHalfWidth && squareCenter <= holePatchHalfWidth
+            let isHolePatch = x >= -holePatchHalfWidth && x <= holePatchHalfWidth
+            let chunk = iceChunkNode(alpha: isHolePatch ? 0.5 : 0.9)
+            chunk.name = "iceRoof"
+            chunk.position = CGPoint(x: x, y: worldTop + CGFloat.random(in: -jitter...jitter))
+            addChild(chunk)
 
-            let square = SKShapeNode(rectOf: CGSize(width: squareSize, height: squareSize))
-            square.name = "iceRoof"
-            square.fillColor = isHolePatch
-                ? SKColor(red: 0.85, green: 0.98, blue: 1.0, alpha: 0.5)
-                : SKColor(red: 0.75, green: 0.92, blue: 1.0, alpha: 0.9)
-            square.strokeColor = .white
-            square.lineWidth = 1
-            square.position = CGPoint(x: squareCenter, y: worldTop)
-            square.zPosition = 8
-            addChild(square)
-
-            x += squareSize
+            x += step
         }
 
         let edge = SKNode()
@@ -350,17 +359,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         addChild(ceiling)
     }
 
+    /// Every level's left/right edge, styled the same jagged-ice way as the
+    /// roof rather than the plain black squares it used to be. Decorative
+    /// only, like the roof — collision is the single continuous edge below.
     private func addBoundaryWall(at x: CGFloat) {
-        let squareSize: CGFloat = 40
+        let step = WorldConstants.obstacleRadius * 1.5
+        let jitter = WorldConstants.obstacleRadius * 0.3
+
         var y = worldBottom
         while y < worldTop {
-            let square = SKShapeNode(rectOf: CGSize(width: squareSize, height: squareSize))
-            square.fillColor = .black
-            square.strokeColor = .black
-            square.position = CGPoint(x: x, y: y + squareSize / 2)
-            square.zPosition = 8
-            addChild(square)
-            y += squareSize
+            let chunk = iceChunkNode()
+            chunk.position = CGPoint(x: x + CGFloat.random(in: -jitter...jitter), y: y)
+            addChild(chunk)
+            y += step
         }
 
         let wall = SKNode()
@@ -369,6 +380,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         wall.physicsBody?.categoryBitMask = PhysicsCategory.wall
         wall.physicsBody?.collisionBitMask = PhysicsCategory.player
         addChild(wall)
+    }
+
+    /// Decorative jagged ice chunk shared by the roof and boundary walls —
+    /// same silhouette as the ice obstacles, with no physics body of its
+    /// own (those rely on a continuous edge instead, see callers).
+    private func iceChunkNode(alpha: CGFloat = 0.9) -> SKShapeNode {
+        let chunk = SKShapeNode(path: obstacleChunkPath(radius: WorldConstants.obstacleRadius))
+        chunk.zRotation = CGFloat.random(in: 0..<(2 * .pi))
+        chunk.fillColor = SKColor(red: 0.75, green: 0.92, blue: 1.0, alpha: alpha)
+        chunk.strokeColor = SKColor.white.withAlphaComponent(alpha)
+        chunk.lineWidth = 1
+        chunk.zPosition = 8
+        return chunk
     }
 
     private func setUpPlayer() {
@@ -476,6 +500,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         gameOverOverlay.resize(to: size)
     }
 
+    private func setUpOutOfFundingOverlay() {
+        cameraNode.addChild(outOfFundingOverlay)
+        outOfFundingOverlay.resize(to: size)
+    }
+
     private func setUpShopOverlay() {
         cameraNode.addChild(shopOverlay)
         shopOverlay.resize(to: size)
@@ -499,6 +528,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         repositionPointsHUD()
         loadingOverlay.resize(to: size)
         gameOverOverlay.resize(to: size)
+        outOfFundingOverlay.resize(to: size)
         shopOverlay.resize(to: size)
         advisorOverlay.resize(to: size)
         updateDarknessOverlay()
@@ -533,8 +563,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         for slot in layout.ooiSlots {
             addOOI(at: slot.position)
         }
-        for slot in layout.emptySlots {
-            addEmptySlot(at: slot.position)
+        for slot in layout.iceChunkSlots where !isNearSpawn(slot.position) {
+            let chunk = FloatingIceChunk(at: slot.position)
+            addChild(chunk)
+            obstacles.append(chunk)
         }
         for slot in layout.snakeSlots where !isNearSpawn(slot.position) {
             addSnake(at: slot.position)
@@ -567,13 +599,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     /// Picks a random spot for the next-level entrance, clear of the spawn
     /// area and not buried inside a tunnel wall — otherwise it could land
     /// somewhere unreachable.
+    /// Always somewhere ahead of spawn (never to its left), so reaching it
+    /// never means backtracking — only how far right, and how high up,
+    /// is randomized.
     private func randomLevelEntrancePosition() -> CGPoint {
         let xMargin: CGFloat = 100
         let yMargin: CGFloat = 40
+        let minForwardDistance: CGFloat = 300
+        let minX = max(worldMinX + xMargin, spawnPosition.x + minForwardDistance)
 
         for _ in 0..<50 {
             let candidate = CGPoint(
-                x: CGFloat.random(in: (worldMinX + xMargin)...(worldMaxX - xMargin)),
+                x: CGFloat.random(in: minX...(worldMaxX - xMargin)),
                 y: CGFloat.random(in: (worldBottom + yMargin)...(worldTop - yMargin))
             )
             if !isNearSpawn(candidate) && !isInsideObstacle(candidate) {
@@ -581,7 +618,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
 
-        return CGPoint(x: 0, y: worldBottom + 20)
+        return CGPoint(x: minX, y: worldBottom + 20)
     }
 
     private func isInsideObstacle(_ position: CGPoint) -> Bool {
@@ -630,12 +667,26 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         isGameOver = true
 
         depthProgress.save(depth)
-        pointsManager.losePoints(deathPointPenalty)
-        pointsHUD.update(points: pointsManager.points, depth: depth)
         player.physicsBody?.velocity = .zero
-        gameOverOverlay.show()
 
-        if showAdvisorOnStart, !hasShownFirstDeathAdvisor {
+        if deathPenaltyWaiver.hasBeenUsed {
+            let canAffordReplacement = pointsManager.points >= deathPointPenalty
+            pointsManager.losePoints(deathPointPenalty)
+            pointsHUD.update(points: pointsManager.points, depth: depth)
+
+            if canAffordReplacement {
+                gameOverOverlay.show()
+            } else {
+                isOutOfFunding = true
+                outOfFundingOverlay.show()
+            }
+        } else {
+            // First death of the playthrough — NASA covers it, no charge.
+            deathPenaltyWaiver.markUsed()
+            gameOverOverlay.show()
+        }
+
+        if !isOutOfFunding, showAdvisorOnStart, !hasShownFirstDeathAdvisor {
             hasShownFirstDeathAdvisor = true
             showAdvisorMessage(AdvisorMessages.firstDeath)
         }
@@ -647,6 +698,25 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         isGameOver = false
         gameOverOverlay.hide()
+    }
+
+    /// The only option from OutOfFundingOverlay — wipes every bit of saved
+    /// progress (points, upgrades, scanned species, depth) exactly like
+    /// confirming "New Game" from the main menu, then drops straight into a
+    /// fresh run instead of routing back through the menu first.
+    private func startNewGameAfterFunding() {
+        guard let view else { return }
+
+        pointsManager.reset()
+        upgradeStore.resetAll()
+        surveyLog.resetAll()
+        depthProgress.reset()
+        deathPenaltyWaiver.reset()
+
+        let gameScene = GameScene(size: size)
+        gameScene.scaleMode = .resizeFill
+        gameScene.showAdvisorOnStart = true
+        view.presentScene(gameScene, transition: SKTransition.fade(withDuration: 0.5))
     }
 
     private func returnToMainMenu() {
@@ -928,11 +998,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func completeScan(for target: any Scannable) {
         if let ooiTarget = target as? OOI {
-            pointsManager.addPoints(ooiPointValue)
+            pointsManager.addPoints(difficultySettings.difficulty.ooiPointValue)
             ooiTarget.removeFromParent()
         } else {
             surveyLog.markScanned(target.speciesID)
-            pointsManager.addPoints(scanRewardPoints + depthProfile.scanRewardBonus)
+            pointsManager.addPoints(difficultySettings.difficulty.scanRewardPoints + depthProfile.scanRewardBonus)
         }
 
         let facing: CGFloat = player.xScale < 0 ? -1 : 1
@@ -969,7 +1039,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         smallSnakes.removeAll()
 
         children
-            .filter { $0.name == "ooi" || $0.name == "emptySlot" }
+            .filter { $0.name == "ooi" }
             .forEach { $0.removeFromParent() }
 
         levelEntrance?.removeFromParent()
@@ -1068,17 +1138,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         addChild(ooi)
     }
 
-    private func addEmptySlot(at position: CGPoint) {
-        let marker = SKShapeNode(circleOfRadius: 15)
-        marker.name = "emptySlot"
-        marker.position = position
-        marker.fillColor = .clear
-        marker.strokeColor = SKColor.white.withAlphaComponent(0.25)
-        marker.lineWidth = 1
-        marker.zPosition = 1
-        addChild(marker)
-    }
-
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         if isAdvisorShowing {
             if let touch = touches.first {
@@ -1097,6 +1156,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                     closeShop()
                 } else if let upgrade = shopOverlay.hitTestUpgrade(pointInOverlay) {
                     purchase(upgrade)
+                }
+            }
+            return
+        }
+
+        if isOutOfFunding {
+            if let touch = touches.first {
+                let pointInOverlay = outOfFundingOverlay.convert(touch.location(in: self), from: self)
+                if outOfFundingOverlay.hitTestNewGame(pointInOverlay) {
+                    startNewGameAfterFunding()
                 }
             }
             return
@@ -1365,7 +1434,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     func didBegin(_ contact: SKPhysicsContact) {
         let categories = [contact.bodyA.categoryBitMask, contact.bodyB.categoryBitMask]
 
-        if categories.contains(PhysicsCategory.obstacle) {
+        // Must check for the player specifically, not just "any obstacle
+        // contact" — torpedoes also contact obstacles now (to shove floating
+        // ice aside), and that shouldn't damage the player.
+        if categories.contains(PhysicsCategory.obstacle), categories.contains(PhysicsCategory.player) {
             flashPlayerRed()
 
             if lastUpdateTime - lastObstacleHitTime >= obstacleHitCooldown {
@@ -1427,8 +1499,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     /// A torpedo hit kills small and hostile fish outright (large fish are
-    /// spared), scares both kinds of snake into fleeing for a while, and is
-    /// consumed on any of those hits.
+    /// spared), scares both kinds of snake into fleeing for a while, shoves
+    /// a floating ice chunk aside (tunnel-wall obstacles are untouched —
+    /// see floatingIceChunkNode), and is consumed on any of those hits.
     private func handleTorpedoContact(_ contact: SKPhysicsContact) {
         guard let torpedo = torpedoNode(in: contact) else { return }
 
@@ -1448,6 +1521,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             smallSnake.frighten(duration: torpedoFrightenDuration)
             torpedo.removeFromParent()
         }
+
+        if let chunk = floatingIceChunkNode(in: contact) {
+            let direction = (torpedo.physicsBody?.velocity.dx ?? 0) < 0 ? -1.0 : 1.0
+            chunk.shove(direction: direction)
+            torpedo.removeFromParent()
+        }
+    }
+
+    /// Only the lone drifting chunks (see LevelGenerator.IceChunkSlot) are
+    /// shovable — tunnel-wall obstacles share the same physics category but
+    /// are plain SKShapeNodes, not FloatingIceChunk, so they're unaffected.
+    private func floatingIceChunkNode(in contact: SKPhysicsContact) -> FloatingIceChunk? {
+        [contact.bodyA.node, contact.bodyB.node].compactMap { $0 as? FloatingIceChunk }.first
     }
 
     private func flashPlayerRed() {

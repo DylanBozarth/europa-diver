@@ -51,9 +51,10 @@ struct LevelLayout {
         let position: CGPoint
     }
 
-    /// Reserved spot for a future feature (hazards, power-ups, etc.) — no
-    /// gameplay behavior yet, just a marked position.
-    struct EmptySlot {
+    /// A lone drifting ice chunk, scattered independently of the tunnel
+    /// walls — same jagged obstacle rendering and collision, just placed on
+    /// its own sparser spacing (see DepthProfile.iceChunkSpacing).
+    struct IceChunkSlot {
         let position: CGPoint
     }
 
@@ -69,7 +70,7 @@ struct LevelLayout {
     let tunnelWalls: [TunnelWall]
     let fishSlots: [FishSlot]
     let ooiSlots: [OOISlot]
-    let emptySlots: [EmptySlot]
+    let iceChunkSlots: [IceChunkSlot]
     let snakeSlots: [SnakeSlot]
     let smallSnakeSlots: [SmallSnakeSlot]
 }
@@ -113,7 +114,7 @@ struct LevelGenerator {
             tunnelWalls: walls,
             fishSlots: generateFish(),
             ooiSlots: generateOOIs(),
-            emptySlots: generateEmptySlots(),
+            iceChunkSlots: generateIceChunks(),
             snakeSlots: generateSnakes(),
             smallSnakeSlots: generateSmallSnakes()
         )
@@ -282,17 +283,15 @@ struct LevelGenerator {
         return assignments.shuffled()
     }
 
-    /// Tutorial-only: fish only spawn near the far edges of the world,
-    /// well outside the player's starting view, so the first-fish tip
-    /// triggers once they've actually swum to find one instead of firing
-    /// immediately at spawn.
+    /// Tutorial-only: fish are kept out of the player's starting view, near
+    /// the world's left edge — where the player always spawns, since levels
+    /// now run left-to-right — so the first-fish tip triggers once they've
+    /// actually swum to find one instead of firing immediately at spawn.
     private func edgeFishXs() -> [CGFloat] {
-        let edgeBandWidth = (worldMaxX - worldMinX) * 0.2
-        guard edgeBandWidth > 0 else { return [] }
+        let startBuffer = (worldMaxX - worldMinX) * 0.25
+        guard startBuffer > 0 else { return [] }
 
-        let left = positions(spacing: profile.fishSpacing, in: worldMinX...(worldMinX + edgeBandWidth))
-        let right = positions(spacing: profile.fishSpacing, in: (worldMaxX - edgeBandWidth)...worldMaxX)
-        return left + right
+        return positions(spacing: profile.fishSpacing, in: (worldMinX + startBuffer)...worldMaxX)
     }
 
     private func generateOOIs() -> [LevelLayout.OOISlot] {
@@ -305,9 +304,9 @@ struct LevelGenerator {
         }
     }
 
-    private func generateEmptySlots() -> [LevelLayout.EmptySlot] {
-        positions(spacing: profile.emptySlotSpacing).map {
-            LevelLayout.EmptySlot(position: CGPoint(x: $0, y: randomY(margin: 40)))
+    private func generateIceChunks() -> [LevelLayout.IceChunkSlot] {
+        positions(spacing: profile.iceChunkSpacing).map {
+            LevelLayout.IceChunkSlot(position: CGPoint(x: $0, y: randomY(margin: 40)))
         }
     }
 

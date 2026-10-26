@@ -3,7 +3,10 @@
 //  europa-diver
 //
 //  Full-screen "Game Over" cover with tappable retry and shop buttons, shown
-//  when the submarine's durability reaches zero.
+//  when the submarine's durability reaches zero. Two columns: controls on
+//  the left, a Europa fact on the right — previously the fact sat below the
+//  buttons and ran off the bottom of the (short, landscape) screen, so it
+//  was never actually visible.
 //
 
 import SpriteKit
@@ -11,6 +14,7 @@ import SpriteKit
 class GameOverOverlay: SKNode {
 
     private let background = SKShapeNode()
+    private let divider = SKShapeNode()
     private let titleLabel = SKLabelNode(text: "Game Over")
     private let retryButton = SKShapeNode(rectOf: CGSize(width: 140, height: 50), cornerRadius: 10)
     private let retryLabel = SKLabelNode(text: "Retry")
@@ -18,6 +22,7 @@ class GameOverOverlay: SKNode {
     private let shopLabel = SKLabelNode(text: "Shop")
     private let mainMenuButton = SKShapeNode(rectOf: CGSize(width: 140, height: 50), cornerRadius: 10)
     private let mainMenuLabel = SKLabelNode(text: "Main Menu")
+    private let factTitleLabel = SKLabelNode(text: "DID YOU KNOW?")
     private let factLabel = SKLabelNode()
 
     override init() {
@@ -28,19 +33,21 @@ class GameOverOverlay: SKNode {
         background.fillColor = SKColor.black.withAlphaComponent(0.85)
         background.strokeColor = .clear
 
+        divider.fillColor = SKColor.white.withAlphaComponent(0.25)
+        divider.strokeColor = .clear
+        divider.zPosition = 1
+
         titleLabel.fontName = "Helvetica-Bold"
-        titleLabel.fontSize = 36
+        titleLabel.fontSize = 32
         titleLabel.fontColor = .white
         titleLabel.verticalAlignmentMode = .center
         titleLabel.horizontalAlignmentMode = .center
-        titleLabel.position = CGPoint(x: 0, y: 60)
         titleLabel.zPosition = 1
 
         retryButton.name = "retryButton"
         retryButton.fillColor = SKColor.red.withAlphaComponent(0.8)
         retryButton.strokeColor = .white
         retryButton.lineWidth = 2
-        retryButton.position = CGPoint(x: 0, y: -10)
         retryButton.zPosition = 1
 
         retryLabel.fontName = "Helvetica-Bold"
@@ -55,7 +62,6 @@ class GameOverOverlay: SKNode {
         shopButton.fillColor = SKColor.white.withAlphaComponent(0.15)
         shopButton.strokeColor = .white
         shopButton.lineWidth = 2
-        shopButton.position = CGPoint(x: 0, y: -70)
         shopButton.zPosition = 1
 
         shopLabel.fontName = "Helvetica-Bold"
@@ -70,7 +76,6 @@ class GameOverOverlay: SKNode {
         mainMenuButton.fillColor = SKColor.white.withAlphaComponent(0.15)
         mainMenuButton.strokeColor = .white
         mainMenuButton.lineWidth = 2
-        mainMenuButton.position = CGPoint(x: 0, y: -130)
         mainMenuButton.zPosition = 1
 
         mainMenuLabel.fontName = "Helvetica-Bold"
@@ -81,22 +86,29 @@ class GameOverOverlay: SKNode {
         mainMenuLabel.zPosition = 1
         mainMenuButton.addChild(mainMenuLabel)
 
+        factTitleLabel.fontName = "Helvetica-Bold"
+        factTitleLabel.fontSize = 14
+        factTitleLabel.fontColor = SKColor.white.withAlphaComponent(0.6)
+        factTitleLabel.verticalAlignmentMode = .center
+        factTitleLabel.horizontalAlignmentMode = .center
+        factTitleLabel.zPosition = 1
+
         factLabel.fontName = "Helvetica"
-        factLabel.fontSize = 13
-        factLabel.fontColor = SKColor.white.withAlphaComponent(0.7)
+        factLabel.fontSize = 15
+        factLabel.fontColor = SKColor.white.withAlphaComponent(0.85)
         factLabel.numberOfLines = 0
         factLabel.lineBreakMode = .byWordWrapping
-        factLabel.preferredMaxLayoutWidth = 280
         factLabel.verticalAlignmentMode = .center
         factLabel.horizontalAlignmentMode = .center
-        factLabel.position = CGPoint(x: 0, y: -210)
         factLabel.zPosition = 1
 
         addChild(background)
+        addChild(divider)
         addChild(titleLabel)
         addChild(retryButton)
         addChild(shopButton)
         addChild(mainMenuButton)
+        addChild(factTitleLabel)
         addChild(factLabel)
     }
 
@@ -109,6 +121,29 @@ class GameOverOverlay: SKNode {
             rect: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height),
             transform: nil
         )
+
+        // Left column: title + buttons. Right column: the fact, which needs
+        // its own comfortably wide, vertically-centered block rather than
+        // being squeezed below everything else.
+        let leftColumnX = -size.width * 0.22
+        let rightColumnX = size.width * 0.22
+        let rightColumnWidth = min(size.width * 0.4, 340)
+
+        titleLabel.position = CGPoint(x: leftColumnX, y: 70)
+        retryButton.position = CGPoint(x: leftColumnX, y: 0)
+        shopButton.position = CGPoint(x: leftColumnX, y: -60)
+        mainMenuButton.position = CGPoint(x: leftColumnX, y: -120)
+
+        let dividerHeight = min(size.height - 80, 260)
+        divider.path = CGPath(
+            rect: CGRect(x: -1, y: -dividerHeight / 2, width: 2, height: dividerHeight),
+            transform: nil
+        )
+        divider.position = .zero
+
+        factTitleLabel.position = CGPoint(x: rightColumnX, y: 50)
+        factLabel.preferredMaxLayoutWidth = rightColumnWidth
+        factLabel.position = CGPoint(x: rightColumnX, y: 0)
     }
 
     func show() {

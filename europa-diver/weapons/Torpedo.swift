@@ -4,7 +4,8 @@
 //
 //  A slow projectile fired from the front of the submarine. Just a plain
 //  white dot visually — on contact (see GameScene.handleTorpedoContact) it
-//  kills small fish outright and scares snakes into fleeing for a while.
+//  kills small fish outright, scares snakes into fleeing for a while, and
+//  shoves a floating ice chunk aside (tunnel-wall obstacles aren't affected).
 //
 
 import SpriteKit
@@ -36,7 +37,7 @@ enum Torpedo {
         body.linearDamping = 0
         body.categoryBitMask = PhysicsCategory.torpedo
         body.collisionBitMask = PhysicsCategory.none
-        body.contactTestBitMask = PhysicsCategory.smallFish | PhysicsCategory.hostileFish | PhysicsCategory.snake | PhysicsCategory.smallSnake
+        body.contactTestBitMask = PhysicsCategory.smallFish | PhysicsCategory.hostileFish | PhysicsCategory.snake | PhysicsCategory.smallSnake | PhysicsCategory.obstacle
         body.velocity = CGVector(dx: direction * speed, dy: 0)
         dot.physicsBody = body
 

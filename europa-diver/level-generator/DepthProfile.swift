@@ -159,7 +159,9 @@ struct DepthProfile {
         lerpRange(from: 1600...2400, to: 1000...1600)
     }
 
-    var emptySlotSpacing: ClosedRange<CGFloat> { 500...900 }
+    /// Spacing between lone drifting ice chunks, scattered independently of
+    /// the tunnel walls.
+    var iceChunkSpacing: ClosedRange<CGFloat> { 500...900 }
 
     // MARK: - Reward
 

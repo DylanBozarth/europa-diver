@@ -17,7 +17,7 @@ enum AdvisorMessages {
     static let firstOOI = "Wow! That looks like a bacterial colony. The science department is telling me: Scan that!"
 
     /// Shown the first time the player dies in a brand new game.
-    static let firstDeath = "Well, we found life that hates our drones too. Don't worry, NASA has authorized the funding for another drone. Keep discovering new species, and we'll get you some upgrades."
+    static let firstDeath = "Well, we found life that hates our drones too. Don't worry, NASA has authorized the funding for another drone. Keep discovering new species, and we'll get you some upgrades. Each new drone will cost you 500 points, shipping is expensive."
 
     /// Shown the first time the entrance to the next level comes on screen
     /// in a brand new game.
